@@ -60,7 +60,7 @@ export function AppShell() {
           <div className="relative h-full flex flex-col">
             <TopBar onMenu={() => setDrawerOpen(true)} onBell={() => setSheet("notifications")} />
 
-            <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
+            <div className="flex-1 overflow-y-auto no-scrollbar pb-36">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={tab}
