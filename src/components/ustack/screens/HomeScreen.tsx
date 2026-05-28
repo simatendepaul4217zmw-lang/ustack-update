@@ -6,10 +6,11 @@ import { CountUp } from "../CountUp";
 import { ProgressRing } from "../ProgressRing";
 import { VaultCard } from "../VaultCard";
 
-export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }: {
+export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onSend, onCreateVault }: {
   onOpenVault: (v: Vault) => void;
   onDeposit: () => void;
   onWithdraw: () => void;
+  onSend: () => void;
   onCreateVault: () => void;
 }) {
   const [hidden, setHidden] = useState(false);
@@ -87,7 +88,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
       <div className="grid grid-cols-3 gap-3">
         <QuickAction icon={ArrowDownToLine} label="Deposit" onClick={onDeposit} grad="grad-coral" />
         <QuickAction icon={ArrowUpFromLine} label="Withdraw" onClick={onWithdraw} grad="grad-teal" />
-        <QuickAction icon={Send} label="Send" onClick={onWithdraw} grad="grad-mint" />
+        <QuickAction icon={Send} label="Send" onClick={onSend} grad="grad-mint" />
       </div>
 
       {/* Vault carousel */}

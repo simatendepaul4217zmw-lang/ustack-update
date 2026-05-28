@@ -70,7 +70,7 @@ export function AppShell() {
                   exit={{ opacity: 0, x: -24 }}
                   transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
                 >
-                  {tab === "home" && <HomeScreen onOpenVault={openVault} onDeposit={() => setSheet("deposit")} onWithdraw={() => setSheet("withdraw")} onCreateVault={() => setSheet("createVault")} />}
+                  {tab === "home" && <HomeScreen onOpenVault={openVault} onDeposit={() => setSheet("deposit")} onWithdraw={() => setSheet("withdraw")} onSend={() => setSheet("send")} onCreateVault={() => setSheet("createVault")} />}
                   {tab === "vaults" && <VaultsScreen onOpenVault={openVault} onCreateVault={() => setSheet("createVault")} />}
                   {tab === "activity" && <ActivityScreen />}
                   {tab === "profile" && <ProfileScreen />}
