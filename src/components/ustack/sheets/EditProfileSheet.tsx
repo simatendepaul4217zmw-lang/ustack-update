@@ -72,7 +72,7 @@ export function EditProfileSheet({ open, onClose }: { open: boolean; onClose: ()
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">{label}</span>
+      <span className="text-xs text-muted-foreground font-medium uppercase tracking-widest">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}

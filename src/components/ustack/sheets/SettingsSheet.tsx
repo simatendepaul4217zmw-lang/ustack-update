@@ -25,8 +25,8 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <Sheet open={open} onClose={close} title={section === "main" ? "Settings" : section === "pin" ? "Change PIN" : "Notifications"}>
       {section !== "main" && (
-        <button onClick={back} className="flex items-center gap-2 text-sm text-muted-foreground mb-5 -mt-1">
-          <ArrowLeft className="w-4 h-4" /> Back
+        <button onClick={back} className="flex items-center gap-1.5 text-xs text-muted-foreground mb-5 -mt-1">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>
       )}
 
@@ -62,7 +62,7 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
             <Row icon={Trash2} label="Clear app cache" right={<span className="text-xs text-muted-foreground">48 MB</span>} />
           </Group>
 
-          <p className="text-center text-xs text-muted-foreground mt-2">UStack v1.0.0 · Built for Zambia 🇿🇲</p>
+          <p className="text-center text-xs text-muted-foreground mt-2">ustack v1.0.0 · built for zambia</p>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { Lock, TrendingUp, Calendar, Flame, ArrowDownToLine, ArrowUpFromLine, Trophy } from "lucide-react";
+import { Lock, TrendingUp, Calendar, Flame, ArrowDownToLine, ArrowUpFromLine, Trophy, Check } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { ProgressRing } from "../ProgressRing";
 import type { Vault } from "@/lib/ustack-data";
@@ -46,7 +46,12 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
             return (
               <div key={i} className={`flex-1 rounded-xl p-3 text-center border ${hit ? "bg-card border-primary/30" : "bg-card/40 border-transparent"}`}>
                 <div className="text-xs font-semibold">{m * 100}%</div>
-                <div className="text-[10px] text-muted-foreground">{hit ? "✓" : "-"}</div>
+                <div className="flex justify-center mt-0.5">
+                  {hit
+                    ? <Check className="w-3 h-3 text-primary" strokeWidth={3} />
+                    : <span className="text-[10px] text-muted-foreground/40">–</span>
+                  }
+                </div>
               </div>
             );
           })}
