@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Zap, Copy, Check, Wallet, LayoutGrid,
-  ChevronRight, TrendingUp, Lock, ArrowLeft, X as XIcon
+  ChevronRight, TrendingUp, Lock, ArrowLeft, X as XIcon, QrCode
 } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { vaults, fmtSats, type Vault } from "@/lib/ustack-data";
@@ -17,7 +17,13 @@ const accentGrad: Record<string, string> = {
 const PROVIDERS = ["Airtel", "MTN MoMo", "Zamtel"];
 const QUICK_AMOUNTS = ["500", "1000", "2500", "5000"];
 
-export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function DepositSheet({
+  open, onClose, vaultContext,
+}: {
+  open: boolean;
+  onClose: () => void;
+  vaultContext?: Vault | null;
+}) {
   const [step, setStep] = useState<Step>("dest");
   const [dest, setDest] = useState<Dest>("balance");
   const [selectedVault, setSelectedVault] = useState<Vault | null>(null);
@@ -25,7 +31,26 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
   const [provider, setProvider] = useState("MTN MoMo");
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("1000");
+  const [lnAmount, setLnAmount] = useState("");
+  const [invoiceReady, setInvoiceReady] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (open && vaultContext) {
+      setDest("vault");
+      setSelectedVault(vaultContext);
+      setStep("method");
+    } else if (!open) {
+      setStep("dest");
+      setDest("balance");
+      setSelectedVault(null);
+      setTab("momo");
+      setPhone("");
+      setAmount("1000");
+      setLnAmount("");
+      setInvoiceReady(false);
+    }
+  }, [open, vaultContext]);
 
   const reset = () => {
     setStep("dest");
@@ -34,33 +59,25 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
     setTab("momo");
     setPhone("");
     setAmount("1000");
+    setLnAmount("");
+    setInvoiceReady(false);
     onClose();
   };
 
   const selectDest = (d: Dest) => {
     setDest(d);
-    if (d === "balance") {
-      setSelectedVault(null);
-      setStep("method");
-    } else {
-      setStep("vault");
-    }
+    if (d === "balance") { setSelectedVault(null); setStep("method"); }
+    else setStep("vault");
   };
 
-  const selectVault = (v: Vault) => {
-    setSelectedVault(v);
-    setStep("method");
-  };
+  const selectVault = (v: Vault) => { setSelectedVault(v); setStep("method"); };
 
   const canConfirm = () => {
     if (tab === "lightning") return true;
     return phone.trim().length >= 9 && Number(amount) > 0;
   };
 
-  const confirm = () => {
-    setStep("processing");
-    setTimeout(() => setStep("done"), 1500);
-  };
+  const confirm = () => { setStep("processing"); setTimeout(() => setStep("done"), 1500); };
 
   const destLabel = dest === "balance" ? "Main Balance" : selectedVault?.name ?? "Vault";
 
@@ -70,6 +87,13 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
     method: destLabel,
     processing: "Add Funds",
     done: "Add Funds",
+  };
+
+  const backFromMethod = () => {
+    setInvoiceReady(false);
+    setLnAmount("");
+    if (vaultContext) { reset(); return; }
+    dest === "balance" ? setStep("dest") : setStep("vault");
   };
 
   return (
@@ -158,22 +182,36 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
           </motion.div>
         )}
 
-        {/* Step 3: Payment method & details */}
+        {/* Step 3: Payment method */}
         {step === "method" && (
           <motion.div key="method" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <button
-              onClick={() => dest === "balance" ? setStep("dest") : setStep("vault")}
-              className="flex items-center gap-1 text-xs text-muted-foreground mb-4"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </button>
+            {!vaultContext && (
+              <button onClick={backFromMethod} className="flex items-center gap-1 text-xs text-muted-foreground mb-4">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+            )}
+
+            {/* Vault badge when coming from vault detail */}
+            {dest === "vault" && selectedVault && (
+              <div className={`rounded-2xl p-4 ${accentGrad[selectedVault.accent]} relative overflow-hidden mb-5`}>
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-xl" />
+                <div className="relative flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Depositing into</span>
+                  <span className="font-semibold text-foreground">{selectedVault.name}</span>
+                </div>
+                <div className="relative mt-1 text-xs text-muted-foreground flex items-center justify-between">
+                  <span>Progress</span>
+                  <span>{Math.round((selectedVault.currentSats / selectedVault.goalSats) * 100)}% of goal</span>
+                </div>
+              </div>
+            )}
 
             {/* Tab switcher */}
             <div className="flex p-1 rounded-2xl bg-white/5 mb-5">
               {([["momo", "Mobile Money", Smartphone], ["lightning", "Lightning", Zap]] as const).map(([k, label, Icon]) => {
                 const active = tab === k;
                 return (
-                  <button key={k} onClick={() => setTab(k)} className="relative flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium">
+                  <button key={k} onClick={() => { setTab(k); setInvoiceReady(false); setLnAmount(""); }} className="relative flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium">
                     {active && <motion.div layoutId="dep-tab" className="absolute inset-0 grad-coral rounded-xl" />}
                     <Icon className={`relative w-4 h-4 ${active ? "text-background" : "text-muted-foreground"}`} />
                     <span className={`relative ${active ? "text-background" : "text-muted-foreground"}`}>{label}</span>
@@ -185,7 +223,6 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
             <AnimatePresence mode="wait">
               {tab === "momo" ? (
                 <motion.div key="momo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
-                  {/* Provider */}
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Provider</div>
                     <div className="grid grid-cols-3 gap-2">
@@ -195,7 +232,6 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
                     </div>
                   </div>
 
-                  {/* Phone number */}
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Your mobile money number</div>
                     <div className="rounded-2xl glass p-4 flex items-center gap-3">
@@ -208,16 +244,11 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
                         placeholder="97 123 4567"
                         className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50 tracking-wide"
                       />
-                      {phone && (
-                        <button onClick={() => setPhone("")} className="text-muted-foreground">
-                          <XIcon className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      {phone && <button onClick={() => setPhone("")} className="text-muted-foreground"><XIcon className="w-3.5 h-3.5" /></button>}
                     </div>
                     <div className="mt-1.5 text-[10px] text-muted-foreground pl-1">You will receive a prompt to approve the payment.</div>
                   </div>
 
-                  {/* Amount */}
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Amount (ZMW)</div>
                     <div className="rounded-2xl glass p-5 flex items-center justify-center gap-2">
@@ -237,13 +268,6 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
                     </div>
                   </div>
 
-                  {dest === "vault" && selectedVault && (
-                    <div className="rounded-xl bg-white/5 px-4 py-3 flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Depositing into</span>
-                      <span className="font-semibold text-foreground">{selectedVault.name}</span>
-                    </div>
-                  )}
-
                   <button
                     disabled={!canConfirm()}
                     onClick={confirm}
@@ -253,28 +277,58 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
                   </button>
                 </motion.div>
               ) : (
-                <motion.div key="ln" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
-                  <p className="text-sm text-muted-foreground text-center w-full">Scan or copy the invoice below to pay from any Lightning wallet.</p>
-                  <div className="w-52 h-52 rounded-2xl bg-white p-4">
-                    <FakeQR />
-                  </div>
-                  <div className="text-xs text-muted-foreground">Expires in <span className="text-foreground font-semibold">9:42</span></div>
-                  <div className="w-full rounded-2xl bg-white/5 p-3 flex items-center gap-2">
-                    <code className="flex-1 truncate text-xs text-muted-foreground">lnbc500u1p3xyz...0w8h</code>
-                    <button
-                      onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass text-xs font-medium"
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5 text-[oklch(0.86_0.13_160)]" /> : <Copy className="w-3.5 h-3.5" />}
-                      {copied ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                  {dest === "vault" && selectedVault && (
-                    <div className="w-full rounded-xl bg-white/5 px-4 py-3 flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Depositing into</span>
-                      <span className="font-semibold text-foreground">{selectedVault.name}</span>
-                    </div>
-                  )}
+                <motion.div key="ln" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
+                  <AnimatePresence mode="wait">
+                    {!invoiceReady ? (
+                      <motion.div key="ln-amount" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
+                        <div>
+                          <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Amount (sats)</div>
+                          <div className="rounded-2xl glass p-5 flex items-center justify-center gap-2">
+                            <input
+                              inputMode="numeric"
+                              value={lnAmount}
+                              onChange={(e) => setLnAmount(e.target.value.replace(/\D/g, ""))}
+                              className="bg-transparent text-3xl font-semibold text-center tabular-nums focus:outline-none w-44"
+                              placeholder="0"
+                            />
+                            <span className="text-sm text-muted-foreground">sats</span>
+                          </div>
+                          <div className="mt-1.5 text-[10px] text-muted-foreground text-center">Enter the amount, then generate your invoice.</div>
+                        </div>
+                        <button
+                          disabled={!lnAmount || Number(lnAmount) <= 0}
+                          onClick={() => setInvoiceReady(true)}
+                          className="w-full flex items-center justify-center gap-2 grad-btc text-background font-semibold py-4 rounded-2xl shadow-soft active:scale-[0.98] transition disabled:opacity-40"
+                        >
+                          <QrCode className="w-4 h-4" /> Generate Invoice
+                        </button>
+                      </motion.div>
+                    ) : (
+                      <motion.div key="ln-invoice" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
+                        <div className="flex items-center justify-between w-full">
+                          <button onClick={() => { setInvoiceReady(false); }} className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <ArrowLeft className="w-3.5 h-3.5" /> Edit amount
+                          </button>
+                          <span className="text-sm font-semibold">{fmtSats(Number(lnAmount))}</span>
+                        </div>
+                        <div className="w-52 h-52 rounded-2xl bg-white p-4 shadow-float">
+                          <FakeQR />
+                        </div>
+                        <div className="text-xs text-muted-foreground">Expires in <span className="text-foreground font-semibold">9:42</span></div>
+                        <div className="w-full rounded-2xl bg-white/5 p-3 flex items-center gap-2">
+                          <code className="flex-1 truncate text-xs text-muted-foreground">lnbc{lnAmount}u1p3xyz...0w8h</code>
+                          <button
+                            onClick={() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl glass text-xs font-medium shrink-0"
+                          >
+                            {copied ? <Check className="w-3.5 h-3.5 text-[oklch(0.86_0.13_160)]" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copied ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground text-center">Scan with any Lightning wallet or copy the invoice to pay.</p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -285,11 +339,7 @@ export function DepositSheet({ open, onClose }: { open: boolean; onClose: () => 
         {step === "processing" && (
           <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="py-16 flex flex-col items-center gap-4">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
-                className="w-12 h-12 rounded-full border-4 border-white/10 border-t-primary"
-              />
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }} className="w-12 h-12 rounded-full border-4 border-white/10 border-t-primary" />
               <div className="text-sm text-muted-foreground">Processing your deposit...</div>
               <div className="text-xs text-muted-foreground/60">Check your phone for a payment prompt.</div>
             </div>

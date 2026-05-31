@@ -38,9 +38,20 @@ export function AppShell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [activeVault, setActiveVault] = useState<Vault | null>(null);
+  const [depositVault, setDepositVault] = useState<Vault | null>(null);
+  const [withdrawVault, setWithdrawVault] = useState<Vault | null>(null);
 
   const openVault = (v: Vault) => { setActiveVault(v); setSheet("vaultDetail"); };
   const logout = () => nav({ to: "/welcome" });
+
+  const openDeposit = (vault?: Vault) => {
+    setDepositVault(vault ?? null);
+    setSheet("deposit");
+  };
+  const openWithdraw = (vault?: Vault) => {
+    setWithdrawVault(vault ?? null);
+    setSheet("withdraw");
+  };
 
   return (
     <div className="min-h-screen w-full bg-background flex items-center justify-center md:p-8 relative overflow-hidden">
@@ -87,8 +98,8 @@ export function AppShell() {
                   {tab === "home" && (
                     <HomeScreen
                       onOpenVault={openVault}
-                      onDeposit={() => setSheet("deposit")}
-                      onWithdraw={() => setSheet("withdraw")}
+                      onDeposit={() => openDeposit()}
+                      onWithdraw={() => openWithdraw()}
                       onSend={() => setSheet("send")}
                       onCreateVault={() => setSheet("createVault")}
                     />
@@ -110,20 +121,34 @@ export function AppShell() {
             <BottomNav tab={tab} onChange={setTab} />
             <Fab
               onCreateVault={() => setSheet("createVault")}
-              onAddFunds={() => setSheet("deposit")}
+              onAddFunds={() => openDeposit()}
               onSend={() => setSheet("send")}
-              onWithdraw={() => setSheet("withdraw")}
+              onWithdraw={() => openWithdraw()}
             />
           </div>
         </motion.div>
 
         {/* Sheets */}
         <NotificationsSheet open={sheet === "notifications"} onClose={() => setSheet(null)} />
-        <CreateVaultSheet open={sheet === "createVault"} onClose={() => setSheet(null)} onDeposit={() => setSheet("deposit")} />
-        <DepositSheet open={sheet === "deposit"} onClose={() => setSheet(null)} />
-        <WithdrawSheet open={sheet === "withdraw"} onClose={() => setSheet(null)} />
+        <CreateVaultSheet open={sheet === "createVault"} onClose={() => setSheet(null)} onDeposit={() => openDeposit()} />
+        <DepositSheet
+          open={sheet === "deposit"}
+          onClose={() => { setSheet(null); setDepositVault(null); }}
+          vaultContext={depositVault}
+        />
+        <WithdrawSheet
+          open={sheet === "withdraw"}
+          onClose={() => { setSheet(null); setWithdrawVault(null); }}
+          vaultContext={withdrawVault}
+        />
         <SendSheet open={sheet === "send"} onClose={() => setSheet(null)} />
-        <VaultDetailSheet open={sheet === "vaultDetail"} vault={activeVault} onClose={() => setSheet(null)} onDeposit={() => setSheet("deposit")} onWithdraw={() => setSheet("withdraw")} />
+        <VaultDetailSheet
+          open={sheet === "vaultDetail"}
+          vault={activeVault}
+          onClose={() => setSheet(null)}
+          onDeposit={() => { setSheet(null); setTimeout(() => openDeposit(activeVault!), 120); }}
+          onWithdraw={() => { setSheet(null); setTimeout(() => openWithdraw(activeVault!), 120); }}
+        />
         <SettingsSheet open={sheet === "settings"} onClose={() => setSheet(null)} />
         <HelpSheet open={sheet === "help"} onClose={() => setSheet(null)} />
         <EditProfileSheet open={sheet === "editProfile"} onClose={() => setSheet(null)} />

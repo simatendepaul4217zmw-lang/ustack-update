@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Smartphone, AlertTriangle, Lock, TrendingUp,
@@ -14,10 +14,15 @@ type Source = "balance" | "vault";
 const accentGrad: Record<string, string> = {
   coral: "grad-coral", teal: "grad-teal", mint: "grad-mint", aqua: "grad-teal", btc: "grad-btc",
 };
-
 const PROVIDERS = ["Airtel", "MTN MoMo", "Zamtel"];
 
-export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function WithdrawSheet({
+  open, onClose, vaultContext,
+}: {
+  open: boolean;
+  onClose: () => void;
+  vaultContext?: Vault | null;
+}) {
   const [step, setStep] = useState<Step>("source");
   const [source, setSource] = useState<Source>("balance");
   const [vault, setVault] = useState<Vault | null>(null);
@@ -26,6 +31,26 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("");
+
+  useEffect(() => {
+    if (open && vaultContext) {
+      setSource("vault");
+      setVault(vaultContext);
+      if (vaultContext.type === "hodl" && vaultContext.locked) {
+        setStep("locked");
+      } else {
+        setAmount(String(Math.floor(vaultContext.currentSats * 0.1)));
+        setStep("amount");
+      }
+    } else if (!open) {
+      setStep("source");
+      setSource("balance");
+      setVault(null);
+      setAddress("");
+      setPhone("");
+      setAmount("");
+    }
+  }, [open, vaultContext]);
 
   const reset = () => {
     setStep("source");
@@ -39,23 +64,14 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
 
   const selectSource = (s: Source) => {
     setSource(s);
-    if (s === "balance") {
-      setVault(null);
-      setAmount("");
-      setStep("amount");
-    } else {
-      setStep("vault");
-    }
+    if (s === "balance") { setVault(null); setAmount(""); setStep("amount"); }
+    else setStep("vault");
   };
 
   const selectVault = (v: Vault) => {
     setVault(v);
-    if (v.type === "hodl" && v.locked) {
-      setStep("locked");
-    } else {
-      setAmount(String(Math.floor(v.currentSats * 0.1)));
-      setStep("amount");
-    }
+    if (v.type === "hodl" && v.locked) setStep("locked");
+    else { setAmount(String(Math.floor(v.currentSats * 0.1))); setStep("amount"); }
   };
 
   const maxAmount = source === "balance" ? availableSats : (vault?.currentSats ?? 0);
@@ -64,7 +80,10 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
   const penalty = Math.floor((Number(amount) || 0) * 0.025);
   const receiveAmount = Number(amount) - (isEarly ? penalty : 0);
 
-  const backFromAmount = () => source === "balance" ? setStep("source") : setStep("vault");
+  const backFromAmount = () => {
+    if (vaultContext) { reset(); return; }
+    source === "balance" ? setStep("source") : setStep("vault");
+  };
 
   const canContinue = () => {
     if (!amount || Number(amount) <= 0 || Number(amount) > maxAmount) return false;
@@ -77,7 +96,7 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
     source: "Withdraw",
     vault: "Select Vault",
     locked: vault?.name,
-    amount: source === "balance" ? "Main Balance" : vault?.name,
+    amount: vaultContext ? vaultContext.name : (source === "balance" ? "Main Balance" : vault?.name),
     warning: "Early Withdrawal",
     done: "Withdrawal Sent",
   };
@@ -137,11 +156,7 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
               {vaults.map((v) => {
                 const p = v.currentSats / v.goalSats;
                 return (
-                  <button
-                    key={v.id}
-                    onClick={() => selectVault(v)}
-                    className="flex items-center gap-3 rounded-2xl glass p-4 text-left transition active:scale-[0.98]"
-                  >
+                  <button key={v.id} onClick={() => selectVault(v)} className="flex items-center gap-3 rounded-2xl glass p-4 text-left transition active:scale-[0.98]">
                     <div className={`w-11 h-11 rounded-xl ${accentGrad[v.accent]} flex items-center justify-center shrink-0`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -173,7 +188,16 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
         {/* Step 2b: Locked vault */}
         {step === "locked" && vault && (
           <motion.div key="locked" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col items-center text-center gap-3 mt-2">
+            {vaultContext && (
+              <div className={`rounded-2xl p-4 ${accentGrad[vault.accent]} relative overflow-hidden mb-5`}>
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-xl" />
+                <div className="relative text-xs text-muted-foreground flex items-center justify-between">
+                  <span>Vault</span>
+                  <span className="font-semibold text-foreground">{vault.name}</span>
+                </div>
+              </div>
+            )}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col items-center text-center gap-3">
               <div className="w-16 h-16 rounded-2xl grad-coral flex items-center justify-center">
                 <Lock className="w-8 h-8 text-background" />
               </div>
@@ -191,12 +215,17 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
               </div>
               <p className="text-xs text-muted-foreground">Stay disciplined. Future you will be grateful.</p>
             </div>
-            <button onClick={() => setStep("vault")} className="mt-5 w-full flex items-center justify-center gap-2 grad-teal text-primary-foreground font-semibold py-4 rounded-2xl">
+            <button
+              onClick={vaultContext ? reset : () => setStep("vault")}
+              className="mt-5 w-full flex items-center justify-center gap-2 grad-teal text-primary-foreground font-semibold py-4 rounded-2xl"
+            >
               Keep Stacking
             </button>
-            <button onClick={() => setStep("vault")} className="mt-3 w-full text-muted-foreground text-sm py-2 flex items-center justify-center gap-1">
-              <ArrowLeft className="w-3.5 h-3.5" /> Back to vaults
-            </button>
+            {!vaultContext && (
+              <button onClick={() => setStep("vault")} className="mt-3 w-full text-muted-foreground text-sm py-2 flex items-center justify-center gap-1">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to vaults
+              </button>
+            )}
           </motion.div>
         )}
 
@@ -206,6 +235,21 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
             <button onClick={backFromAmount} className="flex items-center gap-1 text-xs text-muted-foreground mb-5">
               <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
+
+            {/* Vault badge when coming from vault detail */}
+            {vault && (
+              <div className={`rounded-2xl p-4 ${accentGrad[vault.accent]} relative overflow-hidden mb-5`}>
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-xl" />
+                <div className="relative flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Withdrawing from</span>
+                  <span className="font-semibold text-foreground">{vault.name}</span>
+                </div>
+                <div className="relative mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Available</span>
+                  <span>{fmtSats(vault.currentSats)} sats</span>
+                </div>
+              </div>
+            )}
 
             {/* Method selector */}
             <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Withdrawal method</div>
@@ -217,7 +261,6 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
             <AnimatePresence mode="wait">
               {method === "lightning" ? (
                 <motion.div key="ln-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
-                  {/* Lightning address */}
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Lightning invoice or address</div>
                     <div className="rounded-2xl glass p-4 flex items-start gap-3">
@@ -235,12 +278,7 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
                         </button>
                       ) : (
                         <button
-                          onClick={async () => {
-                            try {
-                              const text = await navigator.clipboard.readText();
-                              setAddress(text);
-                            } catch {}
-                          }}
+                          onClick={async () => { try { const t = await navigator.clipboard.readText(); setAddress(t); } catch {} }}
                           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground shrink-0"
                         >
                           <ClipboardPaste className="w-3.5 h-3.5" /> Paste
@@ -248,12 +286,8 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
                       )}
                     </div>
                   </div>
-
-                  {/* Amount */}
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
-
                   {isEarly && <EarlyWarningBadge pct={pct} />}
-
                   <button
                     disabled={!canContinue()}
                     onClick={() => isEarly ? setStep("warning") : setStep("done")}
@@ -264,7 +298,6 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
                 </motion.div>
               ) : (
                 <motion.div key="momo-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
-                  {/* Provider */}
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Provider</div>
                     <div className="grid grid-cols-3 gap-2">
@@ -273,8 +306,6 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
                       ))}
                     </div>
                   </div>
-
-                  {/* Phone number */}
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Receiving phone number</div>
                     <div className="rounded-2xl glass p-4 flex items-center gap-3">
@@ -287,20 +318,12 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
                         placeholder="97 123 4567"
                         className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50 tracking-wide"
                       />
-                      {phone && (
-                        <button onClick={() => setPhone("")} className="text-muted-foreground">
-                          <XIcon className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      {phone && <button onClick={() => setPhone("")} className="text-muted-foreground"><XIcon className="w-3.5 h-3.5" /></button>}
                     </div>
                     <div className="mt-1.5 text-[10px] text-muted-foreground pl-1">Make sure the number matches the {provider} account.</div>
                   </div>
-
-                  {/* Amount */}
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
-
                   {isEarly && <EarlyWarningBadge pct={pct} />}
-
                   <button
                     disabled={!canContinue()}
                     onClick={() => isEarly ? setStep("warning") : setStep("done")}
@@ -323,31 +346,18 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
                 <div className="text-sm font-semibold">Early Withdrawal Warning</div>
               </div>
               <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Withdrawal amount</span>
-                  <span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span>
-                </div>
-                <div className="flex justify-between text-[oklch(0.85_0.15_25)]">
-                  <span>Early exit penalty (2.5%)</span>
-                  <span className="font-semibold">-{fmtSats(penalty)}</span>
-                </div>
+                <div className="flex justify-between"><span>Withdrawal amount</span><span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span></div>
+                <div className="flex justify-between text-[oklch(0.85_0.15_25)]"><span>Early exit penalty (2.5%)</span><span className="font-semibold">-{fmtSats(penalty)}</span></div>
                 <div className="h-px bg-white/10 my-1" />
-                <div className="flex justify-between">
-                  <span>You will receive</span>
-                  <span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span>
-                </div>
+                <div className="flex justify-between"><span>You will receive</span><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span></div>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
                 You're <span className="text-foreground font-semibold">{Math.round(pct * 100)}%</span> of the way to your goal in <span className="text-foreground font-semibold">{vault.name}</span>. Future you might thank you for holding on.
               </p>
             </div>
             <div className="mt-5 flex gap-3">
-              <button onClick={() => setStep("amount")} className="flex-1 glass py-4 rounded-2xl font-semibold text-sm">
-                Keep stacking
-              </button>
-              <button onClick={() => setStep("done")} className="flex-1 bg-[oklch(0.74_0.18_25)]/20 text-[oklch(0.85_0.15_25)] border border-[oklch(0.74_0.18_25)]/30 py-4 rounded-2xl font-semibold text-sm">
-                Withdraw anyway
-              </button>
+              <button onClick={() => setStep("amount")} className="flex-1 glass py-4 rounded-2xl font-semibold text-sm">Keep stacking</button>
+              <button onClick={() => setStep("done")} className="flex-1 bg-[oklch(0.74_0.18_25)]/20 text-[oklch(0.85_0.15_25)] border border-[oklch(0.74_0.18_25)]/30 py-4 rounded-2xl font-semibold text-sm">Withdraw anyway</button>
             </div>
           </motion.div>
         )}
@@ -363,39 +373,22 @@ export function WithdrawSheet({ open, onClose }: { open: boolean; onClose: () =>
               <CheckCircle2 className="w-10 h-10 text-background" />
             </motion.div>
             <div className="text-lg font-semibold">Withdrawal Initiated</div>
-            <div className="text-sm text-muted-foreground leading-relaxed">
+            <div className="text-sm text-muted-foreground">
               <span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span> is on its way via {method === "lightning" ? "Lightning" : "Mobile Money"}.
             </div>
             <div className="w-full rounded-2xl glass p-4 text-left flex flex-col gap-2.5 text-xs text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Source</span>
-                <span className="text-foreground font-medium">{source === "balance" ? "Main Balance" : vault?.name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Method</span>
-                <span className="text-foreground font-medium">{method === "lightning" ? "Lightning" : `${provider} (Mobile Money)`}</span>
-              </div>
+              <div className="flex justify-between"><span>Source</span><span className="text-foreground font-medium">{source === "balance" ? "Main Balance" : vault?.name}</span></div>
+              <div className="flex justify-between"><span>Method</span><span className="text-foreground font-medium">{method === "lightning" ? "Lightning" : `${provider} (Mobile Money)`}</span></div>
               {method === "lightning" && (
-                <div className="flex justify-between gap-4">
-                  <span className="shrink-0">To</span>
-                  <span className="text-foreground font-medium truncate">{address}</span>
-                </div>
+                <div className="flex justify-between gap-4"><span className="shrink-0">To</span><span className="text-foreground font-medium truncate">{address}</span></div>
               )}
               {method === "momo" && (
-                <div className="flex justify-between">
-                  <span>To</span>
-                  <span className="text-foreground font-medium">+260 {phone}</span>
-                </div>
+                <div className="flex justify-between"><span>To</span><span className="text-foreground font-medium">+260 {phone}</span></div>
               )}
               <div className="h-px bg-white/10" />
-              <div className="flex justify-between">
-                <span>Amount</span>
-                <span className="text-foreground font-medium">{fmtSats(receiveAmount)}</span>
-              </div>
+              <div className="flex justify-between"><span>Amount</span><span className="text-foreground font-medium">{fmtSats(receiveAmount)}</span></div>
             </div>
-            <button onClick={reset} className="mt-2 w-full grad-teal text-primary-foreground font-semibold py-4 rounded-2xl">
-              Done
-            </button>
+            <button onClick={reset} className="mt-2 w-full grad-teal text-primary-foreground font-semibold py-4 rounded-2xl">Done</button>
           </motion.div>
         )}
 
@@ -420,12 +413,7 @@ function AmountField({ amount, setAmount, maxAmount }: { amount: string; setAmou
       </div>
       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground px-1">
         <span>Available: <span className="text-foreground font-semibold">{fmtSats(maxAmount)}</span></span>
-        <button
-          onClick={() => setAmount(String(maxAmount))}
-          className="text-[oklch(0.82_0.13_190)] font-semibold text-[10px] uppercase tracking-wider"
-        >
-          Max
-        </button>
+        <button onClick={() => setAmount(String(maxAmount))} className="text-[oklch(0.82_0.13_190)] font-semibold text-[10px] uppercase tracking-wider">Max</button>
       </div>
     </div>
   );
@@ -435,7 +423,7 @@ function EarlyWarningBadge({ pct }: { pct: number }) {
   return (
     <div className="flex items-center gap-2 rounded-xl bg-[oklch(0.74_0.18_25)]/10 border border-[oklch(0.74_0.18_25)]/20 px-3 py-2">
       <AlertTriangle className="w-3.5 h-3.5 text-[oklch(0.74_0.18_25)] shrink-0" />
-      <span className="text-xs text-muted-foreground">Vault is at <span className="text-foreground font-semibold">{Math.round(pct * 100)}%</span>. Early withdrawal applies a 2.5% penalty.</span>
+      <span className="text-xs text-muted-foreground">Vault at <span className="text-foreground font-semibold">{Math.round(pct * 100)}%</span>. Early withdrawal applies a 2.5% penalty.</span>
     </div>
   );
 }
