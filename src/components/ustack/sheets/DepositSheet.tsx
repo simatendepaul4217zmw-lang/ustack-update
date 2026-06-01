@@ -312,27 +312,9 @@ export function DepositSheet({
                           </button>
                         </div>
                         <p className="text-xs text-muted-foreground text-center">Scan with any Lightning wallet or copy the invoice.</p>
-                        <button onClick={() => setWalletPickerOpen((v) => !v)} className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition">
+                        <button onClick={() => setWalletPickerOpen(true)} className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition">
                           <Zap className="w-4 h-4" /> Pay Now
                         </button>
-                        <AnimatePresence>
-                          {walletPickerOpen && (
-                            <motion.div key="wallet-list" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.22 }} className="overflow-hidden w-full">
-                              <div className="pt-1 pb-2">
-                                <div className="text-xs uppercase tracking-widest text-muted-foreground mb-3 px-1">Choose a wallet</div>
-                                <div className="flex flex-col gap-2">
-                                  {WALLETS.map((w) => (
-                                    <button key={w.name} onClick={() => { try { window.open(w.scheme(invoiceData.paymentRequest), "_blank"); } catch {} setWalletPickerOpen(false); }} className="flex items-center gap-3 rounded-2xl glass px-4 py-3 text-left active:scale-[0.98] transition">
-                                      <div className={`w-10 h-10 rounded-xl ${w.bg} flex items-center justify-center shrink-0`}><span className="text-[11px] font-bold text-white">{w.initials}</span></div>
-                                      <span className="flex-1 text-sm font-medium">{w.name}</span>
-                                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -369,6 +351,69 @@ export function DepositSheet({
           </motion.div>
         )}
 
+      </AnimatePresence>
+
+      {/* Wallet picker popup */}
+      <AnimatePresence>
+        {walletPickerOpen && invoiceData && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="wallet-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setWalletPickerOpen(false)}
+              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+            />
+            {/* Popup panel */}
+            <motion.div
+              key="wallet-popup"
+              initial={{ opacity: 0, y: 48 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 48 }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed bottom-0 left-0 right-0 z-[61] mx-auto max-w-sm w-full px-4 pb-8"
+            >
+              <div className="rounded-3xl bg-[oklch(0.14_0.01_260)] border border-white/10 shadow-float overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/8">
+                  <div>
+                    <div className="text-base font-semibold">Choose a wallet</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Open in your Lightning wallet app</div>
+                  </div>
+                  <button
+                    onClick={() => setWalletPickerOpen(false)}
+                    className="w-8 h-8 rounded-full glass flex items-center justify-center"
+                  >
+                    <XIcon className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Wallet list */}
+                <div className="px-4 py-3 flex flex-col gap-2">
+                  {WALLETS.map((w) => (
+                    <motion.button
+                      key={w.name}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => {
+                        try { window.open(w.scheme(invoiceData.paymentRequest), "_blank"); } catch {}
+                        setWalletPickerOpen(false);
+                      }}
+                      className="flex items-center gap-3 rounded-2xl bg-white/5 hover:bg-white/8 border border-white/5 px-4 py-3.5 text-left transition"
+                    >
+                      <div className={`w-10 h-10 rounded-xl ${w.bg} flex items-center justify-center shrink-0`}>
+                        <span className="text-[11px] font-bold text-white">{w.initials}</span>
+                      </div>
+                      <span className="flex-1 text-sm font-medium">{w.name}</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
       </AnimatePresence>
     </Sheet>
   );
