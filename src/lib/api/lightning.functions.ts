@@ -4,6 +4,26 @@ import { verifyToken } from "../auth.server";
 import { createLightningInvoice, payLightningInvoice, confirmMockPayment } from "./blink.server";
 import { execute, queryOne } from "../db/index.server";
 import { creditWallet } from "./wallet.functions";
+import { requestPayment, disburseFunds, getLipilaStatus } from "./lipila.server";
+import { getServerConfig } from "../config.server";
+
+// Helper: convert sats to ZMW using latest stored price
+async function satsToZmw(amountSats: number): Promise<number> {
+  const row = await queryOne<{ price_zmw: string }>(
+    `SELECT price_zmw FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
+  );
+  const priceZmw = row ? Number(row.price_zmw) : 105_000 * 27.5;
+  return (amountSats / 100_000_000) * priceZmw;
+}
+
+// Helper: convert ZMW to sats
+async function zmwToSats(amountZmw: number): Promise<number> {
+  const row = await queryOne<{ price_zmw: string }>(
+    `SELECT price_zmw FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
+  );
+  const priceZmw = row ? Number(row.price_zmw) : 105_000 * 27.5;
+  return Math.floor((amountZmw / priceZmw) * 100_000_000);
+}
 
 export const createInvoice = createServerFn({ method: "POST" })
   .inputValidator(z.object({
@@ -27,7 +47,6 @@ export const sendPayment = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
-    // Check available balance
     const wallet = await queryOne<{ available_sats: string }>(
       `SELECT available_sats FROM wallets WHERE user_id=$1`, [payload.sub]
     );
@@ -35,7 +54,6 @@ export const sendPayment = createServerFn({ method: "POST" })
       throw new Error("Insufficient balance");
     }
 
-    // Deduct balance first
     await execute(
       `UPDATE wallets SET available_sats=available_sats-$1, updated_at=NOW() WHERE user_id=$2`,
       [data.amountSats, payload.sub]
@@ -45,7 +63,6 @@ export const sendPayment = createServerFn({ method: "POST" })
       const result = await payLightningInvoice(payload.sub, data.paymentRequest, data.amountSats);
       return result;
     } catch (err) {
-      // Refund on failure
       await execute(
         `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
         [data.amountSats, payload.sub]
@@ -62,13 +79,14 @@ export const confirmMockInvoice = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// Mobile money payout (send sats out via MoMo)
+// Mobile money payout — send sats out converted to ZMW via Lipila
 export const mobileMoneyPayout = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
     phone: z.string(),
     amountSats: z.number().int().positive(),
     provider: z.enum(["airtel", "mtn", "zamtel"]),
+    fullName: z.string().optional(),
   }))
   .handler(async ({ data }) => {
     const payload = await verifyToken(data.token);
@@ -81,24 +99,72 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
       throw new Error("Insufficient balance");
     }
 
+    // Deduct balance first
     await execute(
       `UPDATE wallets SET available_sats=available_sats-$1, updated_at=NOW() WHERE user_id=$2`,
       [data.amountSats, payload.sub]
     );
-    await execute(
-      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
-       VALUES($1,'send',$2,'confirmed','mobile_money',$3)`,
-      [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone })]
-    );
-    await execute(
-      `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
-      [payload.sub, `Sent ${data.amountSats.toLocaleString()} sats`,
-       `Mobile Money · ${data.provider.toUpperCase()}`]
-    );
-    return { ok: true };
+
+    const config = getServerConfig();
+
+    if (config.mockLipila) {
+      // Mock: instant confirmation
+      await execute(
+        `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
+         VALUES($1,'send',$2,'confirmed','mobile_money',$3)`,
+        [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone, mock: true })]
+      );
+      await execute(
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+        [payload.sub, `Sent ${data.amountSats.toLocaleString()} sats`,
+         `Mobile Money · ${data.provider.toUpperCase()}`]
+      );
+      return { ok: true, mock: true };
+    }
+
+    // Convert sats → ZMW
+    const amountZmw = await satsToZmw(data.amountSats);
+
+    // Generate a unique external ID for tracking
+    const externalId = `ustack-payout-${Date.now()}-${payload.sub.slice(0, 8)}`;
+
+    try {
+      const result = await disburseFunds({
+        phone: data.phone,
+        amountZmw,
+        externalId,
+        narration: `UStack payout · ${data.provider.toUpperCase()}`,
+        fullName: data.fullName,
+      });
+
+      await execute(
+        `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
+         VALUES($1,'send',$2,'confirmed','mobile_money',$3)`,
+        [payload.sub, data.amountSats, JSON.stringify({
+          provider: data.provider,
+          phone: data.phone,
+          amountZmw,
+          lipilaTransactionId: result.transactionId,
+          externalId,
+        })]
+      );
+      await execute(
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+        [payload.sub, `Sent ${data.amountSats.toLocaleString()} sats`,
+         `Mobile Money · ${data.provider.toUpperCase()} · K${amountZmw.toFixed(2)}`]
+      );
+      return { ok: true, transactionId: result.transactionId, amountZmw };
+    } catch (err) {
+      // Refund on failure
+      await execute(
+        `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+        [data.amountSats, payload.sub]
+      );
+      throw err;
+    }
   });
 
-// Mobile money deposit (stub — Airtel integration coming soon)
+// Mobile money deposit — request ZMW payment from user via Lipila
 export const mobileMoneySend = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
@@ -110,17 +176,95 @@ export const mobileMoneySend = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
-    // Stub: simulate instant confirmation for now
-    await execute(
+    const config = getServerConfig();
+
+    if (config.mockLipila) {
+      // Mock: instant deposit
+      await execute(
+        `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
+         VALUES($1,'deposit',$2,'confirmed','mobile_money',$3)`,
+        [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone, mock: true })]
+      );
+      await creditWallet(payload.sub, data.amountSats);
+      await execute(
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+        [payload.sub, `Added ${data.amountSats.toLocaleString()} sats`,
+         `Mobile Money · ${data.provider.toUpperCase()}`]
+      );
+      return { ok: true, mock: true, amountSats: data.amountSats, pending: false };
+    }
+
+    // Convert sats → ZMW for the payment request
+    const amountZmw = await satsToZmw(data.amountSats);
+    const externalId = `ustack-deposit-${Date.now()}-${payload.sub.slice(0, 8)}`;
+
+    // Insert a PENDING transaction — webhook will confirm it
+    const txRow = await queryOne<{ id: string }>(
       `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
-       VALUES($1,'deposit',$2,'confirmed','mobile_money',$3)`,
-      [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone })]
+       VALUES($1,'deposit',$2,'pending','mobile_money',$3) RETURNING id`,
+      [payload.sub, data.amountSats, JSON.stringify({
+        provider: data.provider,
+        phone: data.phone,
+        amountZmw,
+        externalId,
+      })]
     );
-    await creditWallet(payload.sub, data.amountSats);
+
+    const result = await requestPayment({
+      phone: data.phone,
+      amountZmw,
+      externalId,
+      narration: `UStack BTC savings deposit · K${amountZmw.toFixed(2)}`,
+    });
+
+    // Store Lipila transaction ID back into the transaction row
     await execute(
-      `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-      [payload.sub, `Added ${data.amountSats.toLocaleString()} sats`,
-       `Mobile Money · ${data.provider.toUpperCase()}`]
+      `UPDATE transactions SET metadata=metadata || $1::jsonb WHERE id=$2`,
+      [JSON.stringify({ lipilaTransactionId: result.transactionId }), txRow?.id]
     );
-    return { ok: true, amountSats: data.amountSats };
+
+    return {
+      ok: true,
+      mock: false,
+      pending: true,
+      amountSats: data.amountSats,
+      amountZmw,
+      transactionId: result.transactionId,
+      message: result.message,
+    };
+  });
+
+// Poll transaction status (for pending MoMo deposits)
+export const checkMomoStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({
+    token: z.string(),
+    lipilaTransactionId: z.string(),
+  }))
+  .handler(async ({ data }) => {
+    const payload = await verifyToken(data.token);
+    if (!payload) throw new Error("Unauthorized");
+
+    const config = getServerConfig();
+    if (config.mockLipila) return { status: "SUCCESS" as const };
+
+    const status = await getLipilaStatus(data.lipilaTransactionId);
+
+    // If confirmed via polling, credit wallet and mark transaction confirmed
+    if (status.status === "SUCCESS") {
+      const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; status: string }>(
+        `SELECT id, user_id, amount_sats, status FROM transactions
+         WHERE metadata->>'lipilaTransactionId'=$1 AND user_id=$2`,
+        [data.lipilaTransactionId, payload.sub]
+      );
+      if (tx && tx.status === "pending") {
+        await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
+        await creditWallet(tx.user_id, Number(tx.amount_sats));
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+          [tx.user_id, `Added ${Number(tx.amount_sats).toLocaleString()} sats`, `Mobile Money deposit confirmed`]
+        );
+      }
+    }
+
+    return { status: status.status };
   });

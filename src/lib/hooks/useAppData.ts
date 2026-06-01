@@ -4,7 +4,7 @@ import { getWallet } from "@/lib/api/wallet.functions";
 import { getVaults, createVault, depositToVault, withdrawFromVault } from "@/lib/api/vault.functions";
 import { getActivity, getNotifications, markNotificationsRead } from "@/lib/api/activity.functions";
 import { getBtcPrice } from "@/lib/api/price.functions";
-import { createInvoice, sendPayment, mobileMoneySend, mobileMoneyPayout } from "@/lib/api/lightning.functions";
+import { createInvoice, sendPayment, mobileMoneySend, mobileMoneyPayout, checkMomoStatus } from "@/lib/api/lightning.functions";
 import { updateProfile } from "@/lib/api/auth.functions";
 import { getPriceProtection, updatePriceProtection } from "@/lib/api/priceprotection.functions";
 
