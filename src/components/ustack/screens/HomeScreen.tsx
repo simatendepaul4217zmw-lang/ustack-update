@@ -312,8 +312,8 @@ function PriceTicker() {
     return () => clearInterval(id);
   }, []);
 
-  const change24h = priceData?.change24h ?? null;
-  const positive = (change24h ?? 0) >= 0;
+  const change30m = priceData?.change30m ?? null;
+  const positive = (change30m ?? 0) >= 0;
   const sparkPath = buildSparkPath(SPARK_POINTS, 80, 28);
   const strokeColor = positive ? "oklch(0.78 0.14 165)" : "oklch(0.65 0.22 15)";
 
@@ -344,7 +344,7 @@ function PriceTicker() {
         </AnimatePresence>
         <div className={`flex items-center justify-end gap-0.5 text-[10px] font-semibold ${positive ? "text-[oklch(0.78_0.14_165)]" : "text-[oklch(0.65_0.22_15)]"}`}>
           {positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-          {change24h !== null ? `${positive ? "+" : ""}${change24h.toFixed(2)}% today` : "loading…"}
+          {change30m !== null ? `${positive ? "+" : ""}${change30m.toFixed(2)}% 30m` : "loading…"}
         </div>
       </div>
     </motion.div>
