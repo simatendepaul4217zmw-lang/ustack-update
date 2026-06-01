@@ -62,6 +62,42 @@ export const confirmMockInvoice = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Mobile money payout (send sats out via MoMo)
+export const mobileMoneyPayout = createServerFn({ method: "POST" })
+  .inputValidator(z.object({
+    token: z.string(),
+    phone: z.string(),
+    amountSats: z.number().int().positive(),
+    provider: z.enum(["airtel", "mtn", "zamtel"]),
+  }))
+  .handler(async ({ data }) => {
+    const payload = await verifyToken(data.token);
+    if (!payload) throw new Error("Unauthorized");
+
+    const wallet = await queryOne<{ available_sats: string }>(
+      `SELECT available_sats FROM wallets WHERE user_id=$1`, [payload.sub]
+    );
+    if (!wallet || Number(wallet.available_sats) < data.amountSats) {
+      throw new Error("Insufficient balance");
+    }
+
+    await execute(
+      `UPDATE wallets SET available_sats=available_sats-$1, updated_at=NOW() WHERE user_id=$2`,
+      [data.amountSats, payload.sub]
+    );
+    await execute(
+      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
+       VALUES($1,'send',$2,'confirmed','mobile_money',$3)`,
+      [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone })]
+    );
+    await execute(
+      `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+      [payload.sub, `Sent ${data.amountSats.toLocaleString()} sats`,
+       `Mobile Money · ${data.provider.toUpperCase()}`]
+    );
+    return { ok: true };
+  });
+
 // Mobile money deposit (stub — Airtel integration coming soon)
 export const mobileMoneySend = createServerFn({ method: "POST" })
   .inputValidator(z.object({

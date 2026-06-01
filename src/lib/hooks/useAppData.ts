@@ -4,7 +4,9 @@ import { getWallet } from "@/lib/api/wallet.functions";
 import { getVaults, createVault, depositToVault, withdrawFromVault } from "@/lib/api/vault.functions";
 import { getActivity, getNotifications, markNotificationsRead } from "@/lib/api/activity.functions";
 import { getBtcPrice } from "@/lib/api/price.functions";
-import { createInvoice, sendPayment, mobileMoneySend } from "@/lib/api/lightning.functions";
+import { createInvoice, sendPayment, mobileMoneySend, mobileMoneyPayout } from "@/lib/api/lightning.functions";
+import { updateProfile } from "@/lib/api/auth.functions";
+import { getPriceProtection, updatePriceProtection } from "@/lib/api/priceprotection.functions";
 
 // ── Wallet ────────────────────────────────────────────────────────────────────
 
@@ -126,7 +128,10 @@ export function useSendPayment() {
   return useMutation({
     mutationFn: (vars: { paymentRequest: string; amountSats: number }) =>
       sendPayment({ data: { ...vars, token: token! } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["wallet"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
   });
 }
 
@@ -140,5 +145,50 @@ export function useMobileMoneyDeposit() {
       qc.invalidateQueries({ queryKey: ["wallet"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
     },
+  });
+}
+
+export function useMobileMoneyPayout() {
+  const { token } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { phone: string; amountSats: number; provider: "airtel" | "mtn" | "zamtel" }) =>
+      mobileMoneyPayout({ data: { ...vars, token: token! } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
+  });
+}
+
+// ── Profile ───────────────────────────────────────────────────────────────────
+
+export function useUpdateProfile() {
+  const { token } = useAuth();
+  return useMutation({
+    mutationFn: (vars: { displayName?: string; avatarColor?: string }) =>
+      updateProfile({ data: { ...vars, token: token! } }),
+  });
+}
+
+// ── Price Protection ──────────────────────────────────────────────────────────
+
+export function usePriceProtection() {
+  const { token, isAuthenticated } = useAuth();
+  return useQuery({
+    queryKey: ["priceProtection", token],
+    queryFn: () => getPriceProtection({ data: { token: token! } }),
+    enabled: !!token && isAuthenticated,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdatePriceProtection() {
+  const { token } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { enabled: boolean; thresholdPct: number }) =>
+      updatePriceProtection({ data: { ...vars, token: token! } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["priceProtection"] }),
   });
 }

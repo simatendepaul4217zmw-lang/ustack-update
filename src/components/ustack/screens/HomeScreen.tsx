@@ -25,6 +25,9 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onSend, onCreat
   const { data: vaults = [] } = useVaults();
   const { data: activityItems = [] } = useActivity();
 
+  const { data: btcPrice } = useBtcPrice();
+  const priceZmw = btcPrice?.priceZmw;
+
   const totalSats = wallet?.totalSats ?? 0;
   const lockedSats = wallet?.vaultSats ?? 0;
   const availableSats = wallet?.availableSats ?? 0;
@@ -61,12 +64,12 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onSend, onCreat
         <div className="relative -mt-1 flex items-center gap-3">
           <span className="text-sm text-muted-foreground">≈ {fmtBTC(totalSats)} BTC</span>
           <span className="text-white/20 text-xs">·</span>
-          <span className="text-sm font-medium text-foreground/80">{hidden ? "•••" : fmtZMW(totalSats)}</span>
+          <span className="text-sm font-medium text-foreground/80">{hidden ? "•••" : fmtZMW(totalSats, priceZmw)}</span>
         </div>
 
         <div className="relative mt-5 grid grid-cols-2 gap-3">
-          <Stat label="Locked" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtZMW(lockedSats)} accent="coral" />
-          <Stat label="Available" value={hidden ? "•••" : fmtSats(availableSats)} zmw={hidden ? undefined : fmtZMW(availableSats)} accent="teal" />
+          <Stat label="Locked" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtZMW(lockedSats, priceZmw)} accent="coral" />
+          <Stat label="Available" value={hidden ? "•••" : fmtSats(availableSats)} zmw={hidden ? undefined : fmtZMW(availableSats, priceZmw)} accent="teal" />
         </div>
 
         {/* monthly progress */}
@@ -309,8 +312,8 @@ function PriceTicker() {
     return () => clearInterval(id);
   }, []);
 
-  const change24h = +2.34;
-  const positive = change24h >= 0;
+  const change24h = priceData?.change24h ?? null;
+  const positive = (change24h ?? 0) >= 0;
   const sparkPath = buildSparkPath(SPARK_POINTS, 80, 28);
   const strokeColor = positive ? "oklch(0.78 0.14 165)" : "oklch(0.65 0.22 15)";
 
@@ -341,7 +344,7 @@ function PriceTicker() {
         </AnimatePresence>
         <div className={`flex items-center justify-end gap-0.5 text-[10px] font-semibold ${positive ? "text-[oklch(0.78_0.14_165)]" : "text-[oklch(0.65_0.22_15)]"}`}>
           {positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-          {positive ? "+" : ""}{change24h}% today
+          {change24h !== null ? `${positive ? "+" : ""}${change24h.toFixed(2)}% today` : "loading…"}
         </div>
       </div>
     </motion.div>

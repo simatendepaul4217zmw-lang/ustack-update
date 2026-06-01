@@ -22,7 +22,7 @@ export interface Vault {
 
 export interface Activity {
   id: string;
-  kind: "deposit" | "milestone" | "streak" | "protection" | "withdraw" | "vault";
+  kind: "deposit" | "milestone" | "streak" | "protection" | "withdraw" | "vault" | "vault_deposit" | "vault_withdraw" | "vault_created" | "send" | "login";
   title: string;
   meta: string;
   when: string;
@@ -78,9 +78,9 @@ export const tips = [
 export const fmtSats = (n: number) => n.toLocaleString("en-US");
 export const fmtBTC = (sats: number) => (sats / 100_000_000).toFixed(4);
 
-export const BTC_PRICE_ZMW = 600_000; // 1 BTC = K 600,000 (matches mock vault goalFiat)
-export const satsToZMW = (sats: number) => (sats / 100_000_000) * BTC_PRICE_ZMW;
-export const fmtZMW = (sats: number) => {
-  const k = satsToZMW(sats);
+export const BTC_PRICE_ZMW = 600_000; // 1 BTC = K 600,000 (fallback when live price is unavailable)
+export const satsToZMW = (sats: number, priceZmw = BTC_PRICE_ZMW) => (sats / 100_000_000) * priceZmw;
+export const fmtZMW = (sats: number, priceZmw = BTC_PRICE_ZMW) => {
+  const k = satsToZMW(sats, priceZmw);
   return `K ${k < 1 ? k.toFixed(2) : Math.round(k).toLocaleString("en-US")}`;
 };

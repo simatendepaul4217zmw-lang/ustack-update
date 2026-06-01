@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Smartphone, CheckCircle2 } from "lucide-react";
+import { Zap, Smartphone, CheckCircle2, AlertCircle } from "lucide-react";
 import { Sheet } from "./Sheet";
-import { availableSats, fmtSats, fmtZMW } from "@/lib/ustack-data";
+import { fmtSats, fmtZMW } from "@/lib/ustack-data";
+import { useWallet, useSendPayment, useMobileMoneyPayout, useBtcPrice } from "@/lib/hooks/useAppData";
 
-type Step = "form" | "done";
+type Step = "form" | "loading" | "done" | "error";
 type MoMoProvider = "airtel" | "mtn" | "zamtel";
 
 const MOMO_PROVIDERS: { id: MoMoProvider; label: string; sub: string }[] = [
@@ -20,16 +21,47 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("");
+  const [errMsg, setErrMsg] = useState("");
 
-  const reset = () => { setStep("form"); setAddress(""); setPhone(""); setAmount(""); onClose(); };
+  const { data: wallet } = useWallet();
+  const { data: btcPrice } = useBtcPrice();
+  const sendPaymentMut = useSendPayment();
+  const momoPayoutMut = useMobileMoneyPayout();
+
+  const availableSats = wallet?.available_sats ?? 0;
+  const priceZmw = btcPrice?.priceZmw;
+
+  const reset = () => {
+    setStep("form");
+    setAddress(""); setPhone(""); setAmount(""); setErrMsg("");
+    onClose();
+  };
+
   const recipient = method === "lightning" ? address : phone;
-  const canContinue = recipient.trim().length > 0 && Number(amount) > 0 && Number(amount) <= availableSats;
+  const amtNum = Number(amount);
+  const canContinue = recipient.trim().length > 0 && amtNum > 0 && amtNum <= availableSats;
+
+  const handleSend = async () => {
+    setErrMsg("");
+    setStep("loading");
+    try {
+      if (method === "lightning") {
+        await sendPaymentMut.mutateAsync({ paymentRequest: address.trim(), amountSats: amtNum });
+      } else {
+        await momoPayoutMut.mutateAsync({ phone: phone.trim(), amountSats: amtNum, provider });
+      }
+      setStep("done");
+    } catch (e: unknown) {
+      setErrMsg(e instanceof Error ? e.message : "Payment failed. Please try again.");
+      setStep("error");
+    }
+  };
 
   return (
     <Sheet open={open} onClose={reset} title="Send Sats">
       <AnimatePresence mode="wait">
 
-        {step === "form" && (
+        {(step === "form" || step === "error") && (
           <motion.div key="form" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Send via</div>
             <div className="grid grid-cols-2 gap-3 mb-5">
@@ -108,8 +140,10 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
               />
               <span className="text-sm text-muted-foreground">sats</span>
             </div>
-            {Number(amount) > 0 && (
-              <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">{fmtZMW(Number(amount))}</div>
+            {amtNum > 0 && (
+              <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">
+                {fmtZMW(amtNum, priceZmw)}
+              </div>
             )}
             <div className="mt-2 flex items-center justify-between px-1">
               <span className="text-xs text-muted-foreground">
@@ -123,13 +157,31 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
               </button>
             </div>
 
+            {step === "error" && errMsg && (
+              <div className="mt-4 rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {errMsg}
+              </div>
+            )}
+
             <button
               disabled={!canContinue}
-              onClick={() => setStep("done")}
+              onClick={handleSend}
               className="mt-6 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
             >
               Send
             </button>
+          </motion.div>
+        )}
+
+        {step === "loading" && (
+          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center gap-4 py-16">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }}
+              className="w-12 h-12 rounded-full border-2 border-white/20 border-t-primary"
+            />
+            <div className="text-sm text-muted-foreground">Sending {fmtSats(amtNum)} sats…</div>
           </motion.div>
         )}
 
@@ -145,7 +197,7 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
             </motion.div>
             <div className="text-lg font-semibold">Payment Sent</div>
             <div className="text-sm text-muted-foreground leading-relaxed">
-              <span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span> sent via {method === "lightning" ? "Lightning" : "Mobile Money"}.
+              <span className="text-foreground font-semibold">{fmtSats(amtNum)}</span> sent via {method === "lightning" ? "Lightning" : "Mobile Money"}.
             </div>
             <div className="w-full rounded-2xl glass p-4 text-left flex flex-col gap-2 text-xs text-muted-foreground">
               <div className="flex justify-between">
@@ -162,8 +214,14 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
                   </span>
                 </div>
               )}
-              <div className="flex justify-between"><span>Method</span><span className="text-foreground font-medium">{method === "lightning" ? "Lightning" : "Mobile Money"}</span></div>
-              <div className="flex justify-between"><span>Amount</span><span className="text-foreground font-medium">{fmtSats(Number(amount))}</span></div>
+              <div className="flex justify-between">
+                <span>Method</span>
+                <span className="text-foreground font-medium">{method === "lightning" ? "Lightning" : "Mobile Money"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Amount</span>
+                <span className="text-foreground font-medium">{fmtSats(amtNum)} sats</span>
+              </div>
             </div>
             <button onClick={reset} className="mt-2 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
               Done
