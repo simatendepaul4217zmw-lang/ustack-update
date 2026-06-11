@@ -61,14 +61,14 @@ export const APIRoute = createAPIFileRoute("/api/lipila-webhook")({
             [tx.user_id, `Added ${Number(tx.amount_sats).toLocaleString()} sats`, "Mobile Money deposit confirmed"]
           );
           await execute(
-            `INSERT INTO notifications(user_id, type, title, body) VALUES($1,'deposit',$2,$3)`,
+            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
             [tx.user_id, "Deposit confirmed", `Your MoMo deposit of ${Number(tx.amount_sats).toLocaleString()} sats has been confirmed.`]
           );
         }
       } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
         await execute(`UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`, [tx.id]);
         await execute(
-          `INSERT INTO notifications(user_id, type, title, body) VALUES($1,'failed',$2,$3)`,
+          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
           [tx.user_id, "Deposit failed", "Your Mobile Money deposit could not be completed. Please try again."]
         );
       }
