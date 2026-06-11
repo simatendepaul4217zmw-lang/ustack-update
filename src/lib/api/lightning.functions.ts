@@ -71,6 +71,30 @@ export const sendPayment = createServerFn({ method: "POST" })
     }
   });
 
+// Poll whether a Lightning invoice has been paid
+export const checkInvoiceStatus = createServerFn({ method: "POST" })
+  .inputValidator(z.object({
+    token: z.string(),
+    paymentHash: z.string(),
+  }))
+  .handler(async ({ data }) => {
+    const payload = await verifyToken(data.token);
+    if (!payload) throw new Error("Unauthorized");
+
+    const tx = await queryOne<{ status: string; amount_sats: string }>(
+      `SELECT status, amount_sats FROM transactions
+       WHERE lightning_payment_hash=$1 AND user_id=$2 LIMIT 1`,
+      [data.paymentHash, payload.sub]
+    );
+
+    if (!tx) return { status: "pending" as const, amountSats: 0 };
+
+    return {
+      status: tx.status as "pending" | "confirmed" | "failed",
+      amountSats: Number(tx.amount_sats),
+    };
+  });
+
 // DEV ONLY: simulate payment confirmation for mock invoices
 export const confirmMockInvoice = createServerFn({ method: "POST" })
   .inputValidator(z.object({ paymentHash: z.string() }))

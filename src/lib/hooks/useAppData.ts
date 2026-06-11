@@ -4,7 +4,7 @@ import { getWallet } from "@/lib/api/wallet.functions";
 import { getVaults, createVault, depositToVault, withdrawFromVault } from "@/lib/api/vault.functions";
 import { getActivity, getNotifications, markNotificationsRead } from "@/lib/api/activity.functions";
 import { getBtcPrice } from "@/lib/api/price.functions";
-import { createInvoice, sendPayment, mobileMoneySend, mobileMoneyPayout, checkMomoStatus } from "@/lib/api/lightning.functions";
+import { createInvoice, sendPayment, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus } from "@/lib/api/lightning.functions";
 import { updateProfile } from "@/lib/api/auth.functions";
 import { getPriceProtection, updatePriceProtection } from "@/lib/api/priceprotection.functions";
 
@@ -36,8 +36,16 @@ export function useCreateVault() {
   const { token } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: Parameters<typeof createVault>[0]["data"]) =>
-      createVault({ data: { ...vars, token: token! } }),
+    mutationFn: (vars: {
+      name: string;
+      goalSats: number;
+      vaultType: "stack" | "hodl";
+      accent?: "aqua" | "coral" | "teal" | "mint" | "btc";
+      emoji?: string;
+      goalFiat?: number;
+      currency?: string;
+      lockMonths?: number;
+    }) => createVault({ data: { ...vars, token: token! } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["vaults"] }),
   });
 }
@@ -180,6 +188,28 @@ export function usePriceProtection() {
     queryFn: () => getPriceProtection({ data: { token: token! } }),
     enabled: !!token && isAuthenticated,
     staleTime: 60_000,
+  });
+}
+
+export function useCheckInvoiceStatus(paymentHash: string | null) {
+  const { token, isAuthenticated } = useAuth();
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["invoiceStatus", paymentHash],
+    queryFn: async () => {
+      const result = await checkInvoiceStatus({ data: { token: token!, paymentHash: paymentHash! } });
+      if (result.status === "confirmed") {
+        qc.invalidateQueries({ queryKey: ["wallet"] });
+        qc.invalidateQueries({ queryKey: ["activity"] });
+        qc.invalidateQueries({ queryKey: ["notifications"] });
+      }
+      return result;
+    },
+    enabled: !!token && isAuthenticated && !!paymentHash,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "confirmed" || status === "failed" ? false : 3000;
+    },
   });
 }
 

@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Zap, Copy, Check, Wallet, LayoutGrid,
-  ChevronRight, TrendingUp, Lock, ArrowLeft, X as XIcon, QrCode, ExternalLink, Loader2
+  ChevronRight, TrendingUp, Lock, ArrowLeft, X as XIcon, QrCode, Loader2, CheckCircle2, ExternalLink
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { Sheet } from "./Sheet";
 import { fmtSats, fmtZMW, satsToZMW, BTC_PRICE_ZMW, type Vault } from "@/lib/ustack-data";
-import { useVaults, useMobileMoneyDeposit, useDepositToVault, useCreateInvoice } from "@/lib/hooks/useAppData";
+import { useVaults, useMobileMoneyDeposit, useDepositToVault, useCreateInvoice, useCheckInvoiceStatus } from "@/lib/hooks/useAppData";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 
 type Step = "dest" | "vault" | "method" | "processing" | "done";
@@ -59,6 +60,14 @@ export function DepositSheet({
   const momoDeposit = useMobileMoneyDeposit();
   const vaultDeposit = useDepositToVault();
   const createInvoice = useCreateInvoice();
+  const { data: invoiceStatus } = useCheckInvoiceStatus(invoiceData?.paymentHash ?? null);
+
+  // Auto-advance to done when invoice is confirmed
+  useEffect(() => {
+    if (invoiceStatus?.status === "confirmed" && step === "method") {
+      setStep("done");
+    }
+  }, [invoiceStatus?.status, step]);
 
   useEffect(() => {
     if (open && vaultContext) {
@@ -288,21 +297,41 @@ export function DepositSheet({
                           {createInvoice.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><QrCode className="w-4 h-4" /> Generate Invoice</>}
                         </button>
                       </motion.div>
+                    ) : invoiceStatus?.status === "confirmed" ? (
+                      <motion.div key="ln-paid" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-4 py-4 text-center">
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 18 }} className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.86 0.13 160)" }}>
+                          <CheckCircle2 className="w-10 h-10" />
+                        </motion.div>
+                        <div className="text-xl font-semibold">Payment received!</div>
+                        <div className="text-sm text-muted-foreground">{fmtSats(Number(lnAmount))} added to your {dest === "vault" && selectedVault ? selectedVault.name : "balance"}.</div>
+                        <button onClick={reset} className="mt-2 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">Done</button>
+                      </motion.div>
                     ) : (
                       <motion.div key="ln-invoice" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex flex-col items-center gap-4">
                         <div className="flex items-center justify-between w-full">
                           <button onClick={() => setInvoiceData(null)} className="flex items-center gap-1 text-xs text-muted-foreground"><ArrowLeft className="w-3.5 h-3.5" /> Edit amount</button>
                           <span className="text-sm font-semibold">{fmtSats(Number(lnAmount))}</span>
                         </div>
-                        {/* Dev code hint */}
+                        {/* Dev: mock payment hash for testing */}
                         {invoiceData.mock && (
-                          <div className="w-full glass rounded-xl px-4 py-2.5 flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Mock invoice (dev):</span>
-                            <span className="font-mono text-xs text-primary truncate">{invoiceData.paymentHash}</span>
+                          <div className="w-full glass rounded-xl px-4 py-2.5 flex items-start gap-2">
+                            <span className="text-xs text-muted-foreground shrink-0">Mock hash:</span>
+                            <span className="font-mono text-xs text-primary break-all">{invoiceData.paymentHash}</span>
                           </div>
                         )}
-                        <div className="w-52 h-52 rounded-2xl bg-white p-4 shadow-float flex items-center justify-center">
-                          <FakeQR />
+                        <div className="w-52 h-52 rounded-2xl bg-white p-3 shadow-float flex items-center justify-center">
+                          <QRCodeSVG
+                            value={invoiceData.paymentRequest.toUpperCase()}
+                            size={192}
+                            bgColor="#ffffff"
+                            fgColor="#000000"
+                            level="M"
+                          />
+                        </div>
+                        {/* Waiting indicator */}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.6, repeat: Infinity }} className="w-1.5 h-1.5 rounded-full bg-primary" />
+                          Waiting for payment…
                         </div>
                         <div className="w-full rounded-2xl bg-white/5 p-3 flex items-center gap-2">
                           <code className="flex-1 truncate text-xs text-muted-foreground">{invoiceData.paymentRequest.slice(0, 40)}…</code>
@@ -311,7 +340,7 @@ export function DepositSheet({
                             {copied ? "Copied" : "Copy"}
                           </button>
                         </div>
-                        <p className="text-xs text-muted-foreground text-center">Scan with any Lightning wallet or copy the invoice.</p>
+                        <p className="text-xs text-muted-foreground text-center">Scan with any Lightning wallet or tap Pay Now.</p>
                         <button onClick={() => setWalletPickerOpen(true)} className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition">
                           <Zap className="w-4 h-4" /> Pay Now
                         </button>

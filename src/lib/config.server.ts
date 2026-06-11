@@ -9,6 +9,7 @@ export function getServerConfig() {
     blinkApiKey: process.env.BLINK_API_KEY,
     blinkApiUrl: "https://api.blink.sv/graphql",
     blinkWalletId: process.env.BLINK_WALLET_ID,
+    blinkWebhookSecret: process.env.BLINK_WEBHOOK_SECRET,
     mockBlink: !process.env.BLINK_API_KEY,
     // Lipila (Mobile Money)
     lipilaApiKey: process.env.LIPILA_API_KEY,

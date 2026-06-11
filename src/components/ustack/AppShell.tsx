@@ -66,7 +66,7 @@ export function AppShell() {
   };
 
   // Alert theme: price protection is ON, or BTC price dropped past threshold
-  const thresholdPct = protection?.thresholdPct ?? 10;
+  const thresholdPct = protection?.threshold_pct ?? 10;
   const priceDropped = (btcPrice?.change30m ?? 0) <= -thresholdPct;
   const alertTheme = protection?.enabled === true || priceDropped;
 

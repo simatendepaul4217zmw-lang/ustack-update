@@ -84,7 +84,7 @@ export function EditProfileSheet({ open, onClose }: { open: boolean; onClose: ()
             <div className="flex flex-col gap-4">
               <Field label="Display name" value={name} onChange={setName} placeholder="Your name" />
               <ReadonlyField label="Username" value={`@${user?.username ?? ""}`} note="Cannot be changed" />
-              <ReadonlyField label="Phone number" value={maskPhone(user?.phone ?? "")} note="Requires re-verification to change" />
+              <ReadonlyField label="Email address" value={user?.email ?? ""} note="Requires re-verification to change" />
             </div>
 
             {error && (

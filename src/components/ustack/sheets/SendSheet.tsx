@@ -28,7 +28,7 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const sendPaymentMut = useSendPayment();
   const momoPayoutMut = useMobileMoneyPayout();
 
-  const availableSats = wallet?.available_sats ?? 0;
+  const availableSats = wallet?.availableSats ?? 0;
   const priceZmw = btcPrice?.priceZmw;
 
   const reset = () => {
