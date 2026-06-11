@@ -39,7 +39,7 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
   const displayName = profile?.display_name ?? user?.username ?? "—";
   const initials = profile?.avatar_initials ?? user?.username?.slice(0, 2).toUpperCase() ?? "??";
   const avatarColor = profile?.avatar_color ?? "oklch(0.86 0.13 160)";
-  const maskedPhone = maskPhone(user?.phone ?? "");
+  const maskedEmail = maskEmail(user?.email ?? "");
 
   return (
     <div className="px-5 pt-2 pb-6 flex flex-col gap-5">
@@ -55,7 +55,7 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
         <div className="flex-1 min-w-0">
           <div className="text-lg font-semibold truncate">{displayName}</div>
           <div className="text-xs text-muted-foreground mt-0.5 truncate">
-            @{user?.username ?? "—"} · {maskedPhone}
+            @{user?.username ?? "—"} · {maskedEmail}
           </div>
         </div>
         <button onClick={onEdit} className="text-xs text-primary font-semibold px-3 py-1.5 rounded-full glass shrink-0">
@@ -116,10 +116,12 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
   );
 }
 
-function maskPhone(phone: string) {
-  const cleaned = phone.replace(/\s/g, "");
-  if (cleaned.length < 8) return phone || "—";
-  return `${cleaned.slice(0, 4)} ••• ${cleaned.slice(-4)}`;
+function maskEmail(email: string) {
+  if (!email) return "—";
+  const [local, domain] = email.split("@");
+  if (!domain) return email;
+  const visible = local.length > 2 ? local.slice(0, 2) : local[0] ?? "";
+  return `${visible}••• @${domain}`;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Home, Wallet, Activity, User, Settings, ShieldCheck, HelpCircle, LogOut } from "lucide-react";
 import { Logo } from "./Logo";
+import { useAuth } from "@/lib/context/auth-context";
 import type { Tab } from "./BottomNav";
 
 const items = [
@@ -25,6 +26,11 @@ export function SideDrawer({ open, onClose, onSelect, onSettings, onHelp, onPric
   onPriceProtection: () => void;
   onLogout: () => void;
 }) {
+  const { user, profile } = useAuth();
+  const displayName = profile?.display_name ?? user?.username ?? "—";
+  const initials = profile?.avatar_initials ?? user?.username?.slice(0, 2).toUpperCase() ?? "??";
+  const avatarColor = profile?.avatar_color ?? "oklch(0.86 0.13 160)";
+
   const handle = (id: ItemId) => {
     if (id === "home" || id === "vaults" || id === "activity" || id === "profile") {
       onSelect(id as Tab);
@@ -49,10 +55,15 @@ export function SideDrawer({ open, onClose, onSelect, onSettings, onHelp, onPric
             className="flex-1 px-7 pt-16 pb-10"
           >
             <div className="flex items-center gap-3">
-              <Logo size={42} />
-              <div>
-                <div className="text-base font-semibold">Norman K.</div>
-                <div className="text-xs text-muted-foreground">@norman · UStack</div>
+              <div
+                className="w-[42px] h-[42px] rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0"
+                style={{ background: avatarColor }}
+              >
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <div className="text-base font-semibold truncate">{displayName}</div>
+                <div className="text-xs text-muted-foreground truncate">@{user?.username ?? "—"} · UStack</div>
               </div>
             </div>
 
