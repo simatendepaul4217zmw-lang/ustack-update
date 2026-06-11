@@ -110,9 +110,9 @@ export function WithdrawSheet({
   const methodLabel = method === "lightning" ? "Lightning" : method === "onchain" ? "On-chain" : "Mobile Money";
 
   const titleMap: Record<Step, string | undefined> = {
-    source: "Withdraw", vault: "Select Vault", locked: vault?.name,
+    source: "Transfer", vault: "Select Vault", locked: vault?.name,
     amount: vaultContext ? vaultContext.name : (source === "balance" ? "Main Balance" : vault?.name),
-    warning: "Early Withdrawal", done: "Withdrawal Sent",
+    warning: "Early Transfer", done: "Transfer Sent",
   };
 
   return (
@@ -122,7 +122,7 @@ export function WithdrawSheet({
         {/* Step 1: Source picker */}
         {step === "source" && (
           <motion.div key="source" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-            <p className="text-sm text-muted-foreground mb-5">Where would you like to withdraw from?</p>
+            <p className="text-sm text-muted-foreground mb-5">Where would you like to transfer from?</p>
             <div className="flex flex-col gap-3">
               <button onClick={() => selectSource("balance")} className="flex items-center gap-4 rounded-2xl glass p-5 text-left transition active:scale-[0.98] border border-transparent hover:border-white/10">
                 <div className="w-12 h-12 rounded-xl bg-card border border-white/8 flex items-center justify-center shrink-0" style={{ color: "oklch(0.78 0.14 190)" }}><Wallet className="w-6 h-6" /></div>
@@ -148,7 +148,7 @@ export function WithdrawSheet({
         {step === "vault" && (
           <motion.div key="vault" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <button onClick={() => setStep("source")} className="flex items-center gap-1 text-xs text-muted-foreground mb-4"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
-            <p className="text-sm text-muted-foreground mb-4">Choose which vault to withdraw from.</p>
+            <p className="text-sm text-muted-foreground mb-4">Choose which vault to transfer from.</p>
             <div className="flex flex-col gap-2">
               {vaults.map((v) => {
                 const p = v.currentSats / v.goalSats;
@@ -198,7 +198,7 @@ export function WithdrawSheet({
             {vault && (
               <div className="rounded-2xl p-4 bg-card border border-white/8 mb-5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Withdrawing from</span>
+                  <span className="text-muted-foreground">Transferring from</span>
                   <span className="font-semibold text-foreground">{vault.name}</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
@@ -206,7 +206,7 @@ export function WithdrawSheet({
                 </div>
               </div>
             )}
-            <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Withdrawal method</div>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Transfer method</div>
             <div className="grid grid-cols-3 gap-2 mb-6">
               <MethodCard active={method === "lightning"} onClick={() => setMethod("lightning")} icon={Zap} label="Lightning" sub="Instant" />
               <MethodCard active={method === "momo"} onClick={() => setMethod("momo")} icon={Smartphone} label="Mobile Money" sub="2–5 min" />
@@ -288,7 +288,7 @@ export function WithdrawSheet({
                   </div>
                   <div className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
                     <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                    <p className="text-xs text-muted-foreground">On-chain withdrawals typically confirm in ~10 minutes and may incur a network fee.</p>
+                    <p className="text-xs text-muted-foreground">On-chain transfers typically confirm in ~10 minutes and may incur a network fee.</p>
                   </div>
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
@@ -308,10 +308,10 @@ export function WithdrawSheet({
             <div className="rounded-2xl border border-[oklch(0.73_0.19_55)]/30 bg-[oklch(0.73_0.19_55)]/10 p-5">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-[oklch(0.73_0.19_55)]" />
-                <div className="text-sm font-semibold">Early Withdrawal Warning</div>
+                <div className="text-sm font-semibold">Early Transfer Warning</div>
               </div>
               <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                <div className="flex justify-between"><span>Withdrawal amount</span><span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span></div>
+                <div className="flex justify-between"><span>Transfer amount</span><span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span></div>
                 <div className="flex justify-between text-[oklch(0.85_0.15_55)]"><span>Early exit penalty ({penaltyPct}%)</span><span className="font-semibold">-{fmtSats(penalty)}</span></div>
                 <div className="h-px bg-white/10 my-1" />
                 <div className="flex justify-between"><span>You will receive</span><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span></div>
@@ -322,7 +322,7 @@ export function WithdrawSheet({
             <div className="mt-5 flex gap-3">
               <button onClick={() => setStep("amount")} className="flex-1 glass py-4 rounded-2xl font-semibold text-sm">Keep stacking</button>
               <button disabled={isPending} onClick={handleWithdraw} className="flex-1 bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30 py-4 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-40">
-                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Withdraw anyway"}
+                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Transfer anyway"}
               </button>
             </div>
           </motion.div>
@@ -334,7 +334,7 @@ export function WithdrawSheet({
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 18, delay: 0.1 }} className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.78 0.14 190)" }}>
               <CheckCircle2 className="w-10 h-10" />
             </motion.div>
-            <div className="text-lg font-semibold">Withdrawal Initiated</div>
+            <div className="text-lg font-semibold">Transfer Initiated</div>
             <div className="text-sm text-muted-foreground"><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span> is on its way via {methodLabel}.</div>
             <div className="w-full rounded-2xl glass p-4 text-left flex flex-col gap-2.5 text-xs text-muted-foreground">
               <div className="flex justify-between"><span>Source</span><span className="text-foreground font-medium">{source === "balance" ? "Main Balance" : vault?.name}</span></div>

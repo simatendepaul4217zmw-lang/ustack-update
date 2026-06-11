@@ -21,8 +21,8 @@ type FilterKind = "all" | "deposit" | "withdraw" | "vault" | "events";
 
 const FILTERS: { id: FilterKind; label: string }[] = [
   { id: "all",      label: "All" },
-  { id: "deposit",  label: "Deposits" },
-  { id: "withdraw", label: "Withdrawals" },
+  { id: "deposit",  label: "Add Sats" },
+  { id: "withdraw", label: "Transfers" },
   { id: "vault",    label: "Vaults" },
   { id: "events",   label: "Events" },
 ];

@@ -1,4 +1,4 @@
-import { Lock, TrendingUp, Calendar, Flame, ArrowDownToLine, ArrowUpFromLine, Trophy, Check } from "lucide-react";
+import { Lock, TrendingUp, Calendar, Flame, Zap, ArrowLeftRight, Trophy, Check } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { ProgressRing } from "../ProgressRing";
 import type { Vault } from "@/lib/ustack-data";
@@ -65,10 +65,10 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
 
       <div className="mt-8 flex gap-3">
         <button onClick={onDeposit} className="flex-1 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl flex items-center justify-center gap-2">
-          <ArrowDownToLine className="w-4 h-4" /> Deposit
+          <Zap className="w-4 h-4" /> Add Sats
         </button>
         <button onClick={onWithdraw} className="flex-1 glass font-semibold py-4 rounded-2xl flex items-center justify-center gap-2">
-          <ArrowUpFromLine className="w-4 h-4" /> Withdraw
+          <ArrowLeftRight className="w-4 h-4" /> Transfer
         </button>
       </div>
     </Sheet>

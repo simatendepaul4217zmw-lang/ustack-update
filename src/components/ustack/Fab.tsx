@@ -1,24 +1,24 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Vault, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { Plus, Layers, Zap, ArrowLeftRight } from "lucide-react";
 import { useState } from "react";
 
 const actions = [
   {
     label: "New Vault",
-    Icon: Vault,
-    bg: "oklch(0.52 0.22 290)",        // indigo-purple
+    Icon: Layers,
+    bg: "oklch(0.52 0.22 290)",
     shadow: "oklch(0.52 0.22 290 / 45%)",
   },
   {
-    label: "Add Funds",
-    Icon: ArrowDownToLine,
-    bg: "oklch(0.58 0.20 148)",        // emerald green
+    label: "Add Sats",
+    Icon: Zap,
+    bg: "oklch(0.58 0.20 148)",
     shadow: "oklch(0.58 0.20 148 / 45%)",
   },
   {
-    label: "Withdraw",
-    Icon: ArrowUpFromLine,
-    bg: "oklch(0.65 0.21 38)",         // warm amber-orange
+    label: "Transfer",
+    Icon: ArrowLeftRight,
+    bg: "oklch(0.65 0.21 38)",
     shadow: "oklch(0.65 0.21 38 / 45%)",
   },
 ] as const;
@@ -41,7 +41,6 @@ export function Fab({ onCreateVault, onAddFunds, onWithdraw }: {
     <div className="pointer-events-none absolute inset-x-0 bottom-6 z-50 flex justify-center">
       <div className="pointer-events-auto relative">
 
-        {/* backdrop scrim */}
         <AnimatePresence>
           {open && (
             <motion.div
@@ -56,7 +55,6 @@ export function Fab({ onCreateVault, onAddFunds, onWithdraw }: {
           )}
         </AnimatePresence>
 
-        {/* action buttons */}
         {actions.map((a, i) => {
           const angle = (startDeg + step * i) * (Math.PI / 180);
           const x = Math.cos(angle) * radius;
@@ -71,20 +69,13 @@ export function Fab({ onCreateVault, onAddFunds, onWithdraw }: {
                   transition={{ type: "spring", stiffness: 340, damping: 24, delay: i * 0.05 }}
                   onClick={() => { setOpen(false); handlers[i](); }}
                   className="absolute left-1/2 top-1/2 flex h-[52px] w-[52px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
-                  style={{
-                    background: a.bg,
-                    boxShadow: `0 6px 20px -4px ${a.shadow}`,
-                  }}
+                  style={{ background: a.bg, boxShadow: `0 6px 20px -4px ${a.shadow}` }}
                   aria-label={a.label}
                 >
                   <a.Icon className="h-[22px] w-[22px] text-white" strokeWidth={2} />
                   <span
                     className="pointer-events-none absolute whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium text-white/90"
-                    style={{
-                      bottom: "-22px",
-                      background: "oklch(0.12 0.01 260 / 0.70)",
-                      backdropFilter: "blur(4px)",
-                    }}
+                    style={{ bottom: "-22px", background: "oklch(0.12 0.01 260 / 0.70)", backdropFilter: "blur(4px)" }}
                   >
                     {a.label}
                   </span>
@@ -94,7 +85,6 @@ export function Fab({ onCreateVault, onAddFunds, onWithdraw }: {
           );
         })}
 
-        {/* central FAB */}
         <motion.button
           onClick={() => setOpen((v) => !v)}
           whileTap={{ scale: 0.90 }}

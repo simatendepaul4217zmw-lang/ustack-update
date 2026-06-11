@@ -28,7 +28,7 @@ const faqs = [
   },
   {
     q: "How do I withdraw my sats?",
-    a: "Tap Withdraw on the home screen or inside a vault. Stack Vaults allow early withdrawal with a 2.5% penalty. Hodl Vaults are locked until the expiry date.",
+    a: "Tap Transfer on the home screen or inside a vault. Stack Vaults allow early transfer with a 2.5% penalty. Hodl Vaults are locked until the expiry date.",
   },
 ];
 

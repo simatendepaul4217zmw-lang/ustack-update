@@ -123,7 +123,7 @@ export function DepositSheet({
   };
 
   const titleMap: Record<Step, string> = {
-    dest: "Add Funds", vault: "Select Vault", method: destLabel, processing: "Add Funds", done: "Add Funds",
+    dest: "Add Sats", vault: "Select Vault", method: destLabel, processing: "Add Sats", done: "Add Sats",
   };
 
   return (
@@ -141,7 +141,7 @@ export function DepositSheet({
                 </div>
                 <div className="flex-1">
                   <div className="text-sm font-semibold">Main Balance</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Deposit directly to your available balance</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Add sats directly to your available balance</div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
               </button>
@@ -201,7 +201,7 @@ export function DepositSheet({
             {dest === "vault" && selectedVault && (
               <div className="rounded-2xl p-4 bg-card border border-white/8 mb-5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Depositing into</span>
+                  <span className="text-muted-foreground">Adding sats into</span>
                   <span className="font-semibold text-foreground">{selectedVault.name}</span>
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground flex items-center justify-between">
@@ -266,7 +266,7 @@ export function DepositSheet({
                     </div>
                   </div>
                   <button disabled={!canConfirm()} onClick={confirm} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40">
-                    Confirm deposit
+                    Confirm
                   </button>
                 </motion.div>
               ) : (
@@ -329,7 +329,7 @@ export function DepositSheet({
           <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="py-16 flex flex-col items-center gap-4">
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }} className="w-12 h-12 rounded-full border-4 border-white/10 border-t-primary" />
-              <div className="text-sm text-muted-foreground">Processing your deposit...</div>
+              <div className="text-sm text-muted-foreground">Adding your sats...</div>
             </div>
           </motion.div>
         )}
@@ -340,7 +340,7 @@ export function DepositSheet({
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 18, delay: 0.1 }} className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.86 0.13 160)" }}>
               <Check className="w-10 h-10" strokeWidth={3} />
             </motion.div>
-            <div className="text-xl font-semibold">Deposit confirmed</div>
+            <div className="text-xl font-semibold">Sats added!</div>
             <div className="text-sm text-muted-foreground">Your stack just grew. Progress updated.</div>
             <div className="w-full rounded-2xl glass p-4 text-left flex flex-col gap-2.5 text-xs text-muted-foreground">
               <div className="flex justify-between"><span>Destination</span><span className="text-foreground font-medium">{destLabel}</span></div>

@@ -90,7 +90,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
               <div className="text-sm text-muted-foreground mt-1 mb-5">Pick how you want to save.</div>
               <div className="flex flex-col gap-3">
                 <TypeCard active={type === "hodl"} onClick={() => setType("hodl")} icon={Lock} iconColor="oklch(0.73 0.19 55)" title="Hodl Vault" sub="Lock sats for a set time period, e.g. 6 months. Funds are frozen until the lock expires." />
-                <TypeCard active={type === "stack"} onClick={() => setType("stack")} icon={TrendingUp} iconColor="oklch(0.78 0.14 190)" title="Stack Vault" sub="Stack until you hit a target amount, e.g. 1,000,000 sats. Withdraw anytime with a small penalty." />
+                <TypeCard active={type === "stack"} onClick={() => setType("stack")} icon={TrendingUp} iconColor="oklch(0.78 0.14 190)" title="Stack Vault" sub="Stack until you hit a target amount, e.g. 1,000,000 sats. Transfer anytime with a small penalty." />
               </div>
             </div>
           )}
@@ -181,7 +181,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
               <div className="flex flex-col gap-3">
                 <RuleRow title="Stack to your target" body={`Keep depositing until you hit ${goal.toLocaleString()} sats.`} />
                 <RuleRow title="Early withdrawal" body="You can withdraw anytime, but a 10% penalty applies if you haven't reached your goal." />
-                <RuleRow title="Streak rewards" body="Deposit consistently to build your streak and stay disciplined." />
+                <RuleRow title="Streak rewards" body="Stack consistently to build your streak and stay disciplined." />
               </div>
             </div>
           )}
@@ -202,7 +202,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
                 <Summary k="Target" v={`${goal.toLocaleString()} sats`} />
                 {type === "hodl"
                   ? <Summary k="Lock duration" v={LOCK_OPTIONS.find(o => o.months === lockMonths)?.label ?? `${lockMonths}mo`} />
-                  : <Summary k="Withdrawals" v="Flexible (10% early penalty)" />
+                  : <Summary k="Transfers" v="Flexible (10% early penalty)" />
                 }
               </div>
               <div className="mt-4 rounded-xl bg-white/5 px-4 py-3 flex items-start gap-2">
