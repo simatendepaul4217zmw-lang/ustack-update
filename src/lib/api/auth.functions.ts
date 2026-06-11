@@ -2,66 +2,64 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { query, queryOne, execute } from "../db/index.server";
 import { generateOtp, signAccessToken, signRefreshToken, verifyToken } from "../auth.server";
+import { sendOtpEmail } from "./resend.server";
 
 export const requestOtp = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ phone: z.string().min(8) }))
+  .inputValidator(z.object({ email: z.string().email() }))
   .handler(async ({ data }) => {
-    const phone = data.phone.replace(/\s/g, "");
+    const email = data.email.trim().toLowerCase();
 
-    // Rate-limit: max 5 OTP requests in last hour
     const recent = await query<{ count: string }>(
-      `SELECT COUNT(*) FROM otp_codes WHERE phone=$1 AND created_at > NOW() - INTERVAL '1 hour'`,
-      [phone]
+      `SELECT COUNT(*) FROM otp_codes WHERE email=$1 AND created_at > NOW() - INTERVAL '1 hour'`,
+      [email]
     );
     if (parseInt(recent[0].count) >= 5) {
       throw new Error("Too many OTP requests. Try again in an hour.");
     }
 
-    // Invalidate old codes
-    await execute(`UPDATE otp_codes SET used=true WHERE phone=$1 AND used=false`, [phone]);
+    await execute(`UPDATE otp_codes SET used=true WHERE email=$1 AND used=false`, [email]);
 
     const code = generateOtp();
     await execute(
-      `INSERT INTO otp_codes(phone, code, expires_at) VALUES($1, $2, NOW() + INTERVAL '5 minutes')`,
-      [phone, code]
+      `INSERT INTO otp_codes(email, code, expires_at) VALUES($1, $2, NOW() + INTERVAL '5 minutes')`,
+      [email, code]
     );
 
-    // In production, send SMS here. For now, return code for testing.
-    return { sent: true, devCode: code };
+    await sendOtpEmail(email, code);
+
+    return { sent: true };
   });
 
 export const verifyOtp = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ phone: z.string(), code: z.string(), username: z.string().optional() }))
+  .inputValidator(z.object({ email: z.string().email(), code: z.string(), username: z.string().optional() }))
   .handler(async ({ data }) => {
-    const phone = data.phone.replace(/\s/g, "");
+    const email = data.email.trim().toLowerCase();
 
     const otp = await queryOne<{ id: string; code: string; expires_at: string; used: boolean }>(
-      `SELECT * FROM otp_codes WHERE phone=$1 AND used=false AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1`,
-      [phone]
+      `SELECT * FROM otp_codes WHERE email=$1 AND used=false AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1`,
+      [email]
     );
     if (!otp || otp.code !== data.code) throw new Error("Invalid or expired code.");
 
     await execute(`UPDATE otp_codes SET used=true WHERE id=$1`, [otp.id]);
 
-    let user = await queryOne<{ id: string; username: string; phone: string }>(
-      `SELECT id, username, phone FROM users WHERE phone=$1`,
-      [phone]
+    let user = await queryOne<{ id: string; username: string; email: string }>(
+      `SELECT id, username, email FROM users WHERE email=$1`,
+      [email]
     );
 
     if (!user) {
-      // New user — requires username
       if (!data.username?.trim()) throw new Error("Username required for new account.");
       const username = data.username.trim();
 
       const existing = await queryOne(`SELECT id FROM users WHERE username=$1`, [username]);
       if (existing) throw new Error("Username already taken.");
 
-      user = await queryOne<{ id: string; username: string; phone: string }>(
-        `INSERT INTO users(username, phone) VALUES($1, $2) RETURNING id, username, phone`,
-        [username, phone]
+      user = await queryOne<{ id: string; username: string; email: string }>(
+        `INSERT INTO users(username, email) VALUES($1, $2) RETURNING id, username, email`,
+        [username, email]
       );
 
-      // Create wallet and profile
       await execute(`INSERT INTO wallets(user_id) VALUES($1)`, [user!.id]);
       const initials = username.slice(0, 2).toUpperCase();
       await execute(
@@ -71,7 +69,7 @@ export const verifyOtp = createServerFn({ method: "POST" })
       await execute(`INSERT INTO price_protection(user_id) VALUES($1)`, [user!.id]);
     }
 
-    const accessToken = await signAccessToken({ sub: user!.id, username: user!.username, phone: user!.phone });
+    const accessToken = await signAccessToken({ sub: user!.id, username: user!.username, email: user!.email });
     const refreshToken = await signRefreshToken(user!.id);
 
     await execute(
@@ -79,7 +77,7 @@ export const verifyOtp = createServerFn({ method: "POST" })
       [user!.id, refreshToken]
     );
 
-    return { accessToken, refreshToken, user: { id: user!.id, username: user!.username, phone: user!.phone } };
+    return { accessToken, refreshToken, user: { id: user!.id, username: user!.username, email: user!.email } };
   });
 
 export const refreshAccessToken = createServerFn({ method: "POST" })
@@ -91,13 +89,13 @@ export const refreshAccessToken = createServerFn({ method: "POST" })
     );
     if (!session) throw new Error("Invalid or expired session.");
 
-    const user = await queryOne<{ id: string; username: string; phone: string }>(
-      `SELECT id, username, phone FROM users WHERE id=$1`,
+    const user = await queryOne<{ id: string; username: string; email: string }>(
+      `SELECT id, username, email FROM users WHERE id=$1`,
       [session.user_id]
     );
     if (!user) throw new Error("User not found.");
 
-    const accessToken = await signAccessToken({ sub: user.id, username: user.username, phone: user.phone });
+    const accessToken = await signAccessToken({ sub: user.id, username: user.username, email: user.email });
     return { accessToken };
   });
 
@@ -107,8 +105,8 @@ export const getMe = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
-    const user = await queryOne<{ id: string; username: string; phone: string; email: string | null }>(
-      `SELECT id, username, phone, email FROM users WHERE id=$1`,
+    const user = await queryOne<{ id: string; username: string; email: string }>(
+      `SELECT id, username, email FROM users WHERE id=$1`,
       [payload.sub]
     );
     if (!user) throw new Error("User not found");

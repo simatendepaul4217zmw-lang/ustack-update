@@ -22,23 +22,21 @@ function Signup() {
   const { login } = useAuth();
   const [step, setStep] = useState<"details" | "otp" | "done">("details");
   const [username, setUsername] = useState("");
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [devCode, setDevCode] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const goBack = () => {
-    if (step === "otp") { setStep("details"); setError(""); }
+    if (step === "otp") { setStep("details"); setError(""); setOtp(["","","","","",""]); }
     else nav({ to: "/onboarding" });
   };
 
   const handleSendOtp = async () => {
-    if (!username.trim() || !phone.trim()) return;
+    if (!username.trim() || !email.trim()) return;
     setError(""); setLoading(true);
     try {
-      const res = await requestOtp({ data: { phone } });
-      setDevCode(res.devCode ?? null);
+      await requestOtp({ data: { email } });
       setStep("otp");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to send code");
@@ -52,7 +50,7 @@ function Signup() {
     if (code.length < 6) return;
     setError(""); setLoading(true);
     try {
-      const res = await verifyOtp({ data: { phone, code, username: username.trim() } });
+      const res = await verifyOtp({ data: { email, code, username: username.trim() } });
       login(res.accessToken, res.refreshToken, res.user);
       setStep("done");
       setTimeout(() => nav({ to: "/app" }), 1600);
@@ -94,7 +92,6 @@ function Signup() {
             <span className="text-base font-semibold tracking-wide">UStack</span>
           </div>
 
-          {/* Progress dots */}
           <div className="flex gap-2 mt-6">
             {(["details", "otp"] as const).map((s, i) => {
               const idx = ["details", "otp"].indexOf(step);
@@ -110,7 +107,6 @@ function Signup() {
           </div>
 
           <AnimatePresence mode="wait">
-            {/* Step 1 — Details */}
             {step === "details" && (
               <motion.div key="details" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.28 }} className="flex flex-col flex-1">
                 <div className="mt-6">
@@ -119,7 +115,7 @@ function Signup() {
                 </div>
                 <div className="mt-8 flex flex-col gap-4">
                   <Field label="Username" placeholder="@yourname" value={username} onChange={setUsername} />
-                  <Field label="Phone number" placeholder="+260 …" value={phone} onChange={setPhone} type="tel" />
+                  <Field label="Email address" placeholder="you@example.com" value={email} onChange={setEmail} type="email" />
                 </div>
                 <div className="mt-5 glass rounded-2xl p-4 text-xs text-muted-foreground leading-relaxed">
                   We never sell your data. No aggressive KYC, just what's needed to keep your stack safe.
@@ -128,7 +124,7 @@ function Signup() {
                 <div className="flex-1" />
                 <button
                   onClick={handleSendOtp}
-                  disabled={!username || !phone || loading}
+                  disabled={!username || !email || loading}
                   className="bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? <Spinner /> : <><span>Continue</span><ChevronRight className="w-4 h-4" /></>}
@@ -140,21 +136,12 @@ function Signup() {
               </motion.div>
             )}
 
-            {/* Step 2 — OTP */}
             {step === "otp" && (
               <motion.div key="otp" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.28 }} className="flex flex-col flex-1">
                 <div className="mt-6">
-                  <h1 className="text-[2rem] font-semibold tracking-tight leading-tight">Verify your<br />number</h1>
-                  <p className="mt-2 text-muted-foreground text-sm">Enter the 6-digit code for {phone}.</p>
+                  <h1 className="text-[2rem] font-semibold tracking-tight leading-tight">Check your<br />email</h1>
+                  <p className="mt-2 text-muted-foreground text-sm">We sent a 6-digit code to <span className="text-foreground font-medium">{email}</span></p>
                 </div>
-
-                {/* Dev hint */}
-                {devCode && (
-                  <div className="mt-4 glass rounded-xl px-4 py-2.5 flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Dev code:</span>
-                    <span className="font-mono font-bold text-primary tracking-widest">{devCode}</span>
-                  </div>
-                )}
 
                 <div className="mt-10 flex gap-2 justify-center">
                   {otp.map((v, idx) => (
@@ -173,7 +160,6 @@ function Signup() {
                           (document.getElementById(`otp-${idx + 1}`) as HTMLInputElement)?.focus();
                         }
                         if (idx === 5 && e.target.value) {
-                          // auto-submit when last digit entered
                           setTimeout(() => {
                             const code = [...nv].join("");
                             if (code.length === 6) handleVerify();
@@ -195,7 +181,8 @@ function Signup() {
                 <div className="mt-4 text-center">
                   <button
                     onClick={handleSendOtp}
-                    className="text-sm text-[oklch(0.82_0.13_190)] font-medium"
+                    disabled={loading}
+                    className="text-sm text-[oklch(0.82_0.13_190)] font-medium disabled:opacity-40"
                   >
                     Resend code
                   </button>

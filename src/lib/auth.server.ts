@@ -9,13 +9,13 @@ function getJwtSecret(): Uint8Array {
 export interface JWTPayload {
   sub: string;
   username: string;
-  phone: string;
+  email: string;
   iat?: number;
   exp?: number;
 }
 
 export async function signAccessToken(payload: Omit<JWTPayload, "iat" | "exp">): Promise<string> {
-  return new SignJWT({ username: payload.username, phone: payload.phone })
+  return new SignJWT({ username: payload.username, email: payload.email })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
     .setIssuedAt()
@@ -38,7 +38,7 @@ export async function verifyToken(token: string): Promise<JWTPayload | null> {
     return {
       sub: payload.sub as string,
       username: payload["username"] as string,
-      phone: payload["phone"] as string,
+      email: payload["email"] as string,
     };
   } catch {
     return null;

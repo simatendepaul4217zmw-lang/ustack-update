@@ -4,8 +4,7 @@ import { getMe } from "@/lib/api/auth.functions";
 export interface AuthUser {
   id: string;
   username: string;
-  phone: string;
-  email?: string | null;
+  email: string;
 }
 
 export interface AuthProfile {
@@ -59,7 +58,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading: false,
       });
     } catch {
-      // Token invalid — clear storage
       localStorage.removeItem(STORAGE_KEY_TOKEN);
       localStorage.removeItem(STORAGE_KEY_REFRESH);
       setState({ user: null, profile: null, token: null, refreshToken: null, loading: false });
@@ -80,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(STORAGE_KEY_TOKEN, accessToken);
     localStorage.setItem(STORAGE_KEY_REFRESH, refreshToken);
     setState((s) => ({ ...s, user, token: accessToken, refreshToken, loading: false }));
-    // Fetch profile in background
     getMe({ data: { token: accessToken } }).then((data) => {
       setState((s) => ({ ...s, profile: data.profile as AuthProfile }));
     }).catch(() => {});
