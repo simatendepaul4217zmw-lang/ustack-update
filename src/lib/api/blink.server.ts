@@ -118,7 +118,7 @@ export async function createLightningInvoice(
     body: JSON.stringify({
       query: `mutation LnInvoiceCreate($input: LnInvoiceCreateInput!) {
         lnInvoiceCreate(input: $input) {
-          invoice { paymentRequest paymentHash satoshis expiresAt }
+          invoice { paymentRequest paymentHash satoshis }
           errors { message }
         }
       }`,
@@ -130,10 +130,16 @@ export async function createLightningInvoice(
 
   const json = await res.json() as {
     data?: { lnInvoiceCreate?: { invoice?: { paymentRequest: string; paymentHash: string; satoshis: number; expiresAt: string }; errors?: { message: string }[] } };
+    errors?: { message: string }[];
   };
+  console.error("[blink] lnInvoiceCreate raw response:", JSON.stringify(json));
   const result = json.data?.lnInvoiceCreate;
   if (!result?.invoice) {
-    throw new Error(result?.errors?.[0]?.message ?? "Failed to create invoice");
+    const msg =
+      result?.errors?.[0]?.message ??
+      json.errors?.[0]?.message ??
+      `HTTP ${res.status}: Failed to create invoice`;
+    throw new Error(msg);
   }
 
   await execute(
