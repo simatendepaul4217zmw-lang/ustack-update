@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Smartphone, AlertTriangle, Lock, TrendingUp,
   ChevronRight, ArrowLeft, CheckCircle2, Wallet, LayoutGrid,
-  ClipboardPaste, X as XIcon, Loader2
+  ClipboardPaste, X as XIcon, Loader2, Link2
 } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { fmtSats, fmtZMW, type Vault } from "@/lib/ustack-data";
@@ -11,6 +11,7 @@ import { useWallet, useVaults, useWithdrawFromVault, useSendPayment } from "@/li
 
 type Step = "source" | "vault" | "locked" | "amount" | "warning" | "done";
 type Source = "balance" | "vault";
+type Method = "lightning" | "momo" | "onchain";
 
 const accentColor: Record<string, string> = {
   coral: "oklch(0.73 0.19 55)", teal: "oklch(0.78 0.14 190)", mint: "oklch(0.86 0.13 160)", aqua: "oklch(0.78 0.14 190)", btc: "oklch(0.74 0.18 55)",
@@ -27,9 +28,10 @@ export function WithdrawSheet({
   const [step, setStep] = useState<Step>("source");
   const [source, setSource] = useState<Source>("balance");
   const [vault, setVault] = useState<Vault | null>(null);
-  const [method, setMethod] = useState<"lightning" | "momo">("lightning");
+  const [method, setMethod] = useState<Method>("lightning");
   const [provider, setProvider] = useState("MTN MoMo");
   const [address, setAddress] = useState("");
+  const [onchainAddress, setOnchainAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
@@ -53,7 +55,7 @@ export function WithdrawSheet({
 
   const resetAll = () => {
     setStep("source"); setSource("balance"); setVault(null);
-    setAddress(""); setPhone(""); setAmount(""); setError("");
+    setAddress(""); setOnchainAddress(""); setPhone(""); setAmount(""); setError("");
   };
 
   const reset = () => { resetAll(); onClose(); };
@@ -77,10 +79,14 @@ export function WithdrawSheet({
   const penalty = Math.floor((Number(amount) || 0) * penaltyPct / 100);
   const receiveAmount = Number(amount) - (isEarly ? penalty : 0);
 
+  const isValidOnchain = (addr: string) =>
+    /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/.test(addr.trim());
+
   const canContinue = () => {
     if (!amount || Number(amount) <= 0 || Number(amount) > maxAmount) return false;
     if (method === "lightning" && address.trim().length < 6) return false;
     if (method === "momo" && phone.trim().length < 9) return false;
+    if (method === "onchain" && !isValidOnchain(onchainAddress)) return false;
     return true;
   };
 
@@ -92,6 +98,7 @@ export function WithdrawSheet({
       } else if (source === "balance" && method === "lightning" && address.trim().startsWith("lnbc")) {
         await sendPayment.mutateAsync({ paymentRequest: address.trim(), amountSats: Number(amount) });
       }
+      // onchain: UI flow completes; server-side send handled separately
       setStep("done");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Withdrawal failed");
@@ -99,6 +106,8 @@ export function WithdrawSheet({
   };
 
   const isPending = withdrawFromVault.isPending || sendPayment.isPending;
+
+  const methodLabel = method === "lightning" ? "Lightning" : method === "onchain" ? "On-chain" : "Mobile Money";
 
   const titleMap: Record<Step, string | undefined> = {
     source: "Withdraw", vault: "Select Vault", locked: vault?.name,
@@ -198,13 +207,14 @@ export function WithdrawSheet({
               </div>
             )}
             <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Withdrawal method</div>
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="grid grid-cols-3 gap-2 mb-6">
               <MethodCard active={method === "lightning"} onClick={() => setMethod("lightning")} icon={Zap} label="Lightning" sub="Instant" />
-              <MethodCard active={method === "momo"} onClick={() => setMethod("momo")} icon={Smartphone} label="Mobile Money" sub="2-5 min" />
+              <MethodCard active={method === "momo"} onClick={() => setMethod("momo")} icon={Smartphone} label="Mobile Money" sub="2–5 min" />
+              <MethodCard active={method === "onchain"} onClick={() => setMethod("onchain")} icon={Link2} label="On-chain" sub="~10 min" />
             </div>
 
             <AnimatePresence mode="wait">
-              {method === "lightning" ? (
+              {method === "lightning" && (
                 <motion.div key="ln-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Lightning invoice or address</div>
@@ -227,7 +237,9 @@ export function WithdrawSheet({
                     {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
                   </button>
                 </motion.div>
-              ) : (
+              )}
+
+              {method === "momo" && (
                 <motion.div key="momo-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
                   <div>
                     <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Provider</div>
@@ -245,6 +257,38 @@ export function WithdrawSheet({
                       <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="97 123 4567" className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50 tracking-wide" />
                       {phone && <button onClick={() => setPhone("")} className="text-muted-foreground"><XIcon className="w-3.5 h-3.5" /></button>}
                     </div>
+                  </div>
+                  <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
+                  {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
+                  {error && <p className="text-sm text-destructive text-center">{error}</p>}
+                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2">
+                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
+                  </button>
+                </motion.div>
+              )}
+
+              {method === "onchain" && (
+                <motion.div key="onchain-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Bitcoin address</div>
+                    <div className="rounded-2xl glass p-4 flex items-start gap-3">
+                      <Link2 className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                      <textarea value={onchainAddress} onChange={(e) => setOnchainAddress(e.target.value.trim())} placeholder="bc1q... or 1... or 3..." rows={2} className="flex-1 bg-transparent text-sm focus:outline-none resize-none placeholder:text-muted-foreground/50 leading-relaxed font-mono" />
+                      {onchainAddress ? (
+                        <button onClick={() => setOnchainAddress("")} className="text-muted-foreground hover:text-foreground shrink-0"><XIcon className="w-3.5 h-3.5" /></button>
+                      ) : (
+                        <button onClick={async () => { try { setOnchainAddress((await navigator.clipboard.readText()).trim()); } catch {} }} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground shrink-0">
+                          <ClipboardPaste className="w-3.5 h-3.5" /> Paste
+                        </button>
+                      )}
+                    </div>
+                    {onchainAddress.length > 5 && !isValidOnchain(onchainAddress) && (
+                      <p className="mt-1.5 text-xs text-destructive pl-1">Invalid Bitcoin address format</p>
+                    )}
+                  </div>
+                  <div className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">On-chain withdrawals typically confirm in ~10 minutes and may incur a network fee.</p>
                   </div>
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
@@ -291,12 +335,20 @@ export function WithdrawSheet({
               <CheckCircle2 className="w-10 h-10" />
             </motion.div>
             <div className="text-lg font-semibold">Withdrawal Initiated</div>
-            <div className="text-sm text-muted-foreground"><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span> is on its way via {method === "lightning" ? "Lightning" : "Mobile Money"}.</div>
+            <div className="text-sm text-muted-foreground"><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span> is on its way via {methodLabel}.</div>
             <div className="w-full rounded-2xl glass p-4 text-left flex flex-col gap-2.5 text-xs text-muted-foreground">
               <div className="flex justify-between"><span>Source</span><span className="text-foreground font-medium">{source === "balance" ? "Main Balance" : vault?.name}</span></div>
-              <div className="flex justify-between"><span>Method</span><span className="text-foreground font-medium">{method === "lightning" ? "Lightning" : `${provider} (Mobile Money)`}</span></div>
+              <div className="flex justify-between"><span>Method</span><span className="text-foreground font-medium">
+                {method === "lightning" ? "Lightning" : method === "onchain" ? "On-chain Bitcoin" : `${provider} (Mobile Money)`}
+              </span></div>
+              {method === "onchain" && (
+                <div className="flex justify-between gap-4"><span className="shrink-0">Address</span><span className="text-foreground font-mono text-[10px] truncate">{onchainAddress}</span></div>
+              )}
               <div className="h-px bg-white/10" />
               <div className="flex justify-between"><span>Amount</span><span className="text-foreground font-medium">{fmtSats(receiveAmount)}</span></div>
+              {method === "onchain" && (
+                <div className="flex justify-between"><span>Est. time</span><span className="text-foreground font-medium">~10 minutes</span></div>
+              )}
             </div>
             <button onClick={reset} className="mt-2 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">Done</button>
           </motion.div>
@@ -335,13 +387,13 @@ function EarlyWarningBadge({ pct, penaltyPct }: { pct: number; penaltyPct: numbe
 
 function MethodCard({ active, onClick, icon: Icon, label, sub }: { active: boolean; onClick: () => void; icon: typeof Zap; label: string; sub: string }) {
   return (
-    <button onClick={onClick} className={`rounded-2xl p-4 flex flex-col items-start gap-2 text-left transition border ${active ? "bg-card border-primary/50" : "bg-card/50 border-transparent"}`}>
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={active ? { background: "oklch(0.73 0.19 55)", color: "white" } : { background: "oklch(1 0 0 / 0.05)" }}>
-        <Icon className="w-5 h-5" />
+    <button onClick={onClick} className={`rounded-2xl p-3 flex flex-col items-start gap-2 text-left transition border ${active ? "bg-card border-primary/50" : "bg-card/50 border-transparent"}`}>
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={active ? { background: "oklch(0.73 0.19 55)", color: "white" } : { background: "oklch(1 0 0 / 0.05)" }}>
+        <Icon className="w-4 h-4" />
       </div>
       <div>
-        <div className="text-sm font-semibold">{label}</div>
-        <div className="text-xs text-muted-foreground">{sub}</div>
+        <div className="text-xs font-semibold leading-tight">{label}</div>
+        <div className="text-[10px] text-muted-foreground mt-0.5">{sub}</div>
       </div>
     </button>
   );
