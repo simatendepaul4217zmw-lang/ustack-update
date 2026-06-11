@@ -13,12 +13,12 @@ import { NotificationsSheet } from "./sheets/NotificationsSheet";
 import { CreateVaultSheet } from "./sheets/CreateVaultSheet";
 import { DepositSheet } from "./sheets/DepositSheet";
 import { WithdrawSheet } from "./sheets/WithdrawSheet";
-import { SendSheet } from "./sheets/SendSheet";
 import { VaultDetailSheet } from "./sheets/VaultDetailSheet";
 import { SettingsSheet } from "./sheets/SettingsSheet";
 import { HelpSheet } from "./sheets/HelpSheet";
 import { EditProfileSheet } from "./sheets/EditProfileSheet";
 import { useAuth } from "@/lib/context/auth-context";
+import { usePriceProtection, useBtcPrice } from "@/lib/hooks/useAppData";
 import type { Vault } from "@/lib/ustack-data";
 
 export type SheetKind =
@@ -27,7 +27,6 @@ export type SheetKind =
   | "createVault"
   | "deposit"
   | "withdraw"
-  | "send"
   | "vaultDetail"
   | "settings"
   | "help"
@@ -42,6 +41,9 @@ export function AppShell() {
   const [activeVault, setActiveVault] = useState<Vault | null>(null);
   const [depositVault, setDepositVault] = useState<Vault | null>(null);
   const [withdrawVault, setWithdrawVault] = useState<Vault | null>(null);
+
+  const { data: protection } = usePriceProtection();
+  const { data: btcPrice } = useBtcPrice();
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -63,8 +65,13 @@ export function AppShell() {
     setSheet("withdraw");
   };
 
+  // Alert theme: price protection is ON, or BTC price dropped past threshold
+  const thresholdPct = protection?.thresholdPct ?? 10;
+  const priceDropped = (btcPrice?.change30m ?? 0) <= -thresholdPct;
+  const alertTheme = protection?.enabled === true || priceDropped;
+
   return (
-    <div className="min-h-screen w-full bg-background flex items-center justify-center md:p-8 relative overflow-hidden">
+    <div className={`min-h-screen w-full bg-background flex items-center justify-center md:p-8 relative overflow-hidden${alertTheme ? " theme-alert" : ""}`}>
 
       {/* phone container */}
       <div className="relative w-full md:w-[420px] md:h-[860px] h-screen md:rounded-[3rem] overflow-hidden md:border md:border-white/10 md:shadow-float bg-background">
@@ -105,7 +112,6 @@ export function AppShell() {
                       onOpenVault={openVault}
                       onDeposit={() => openDeposit()}
                       onWithdraw={() => openWithdraw()}
-                      onSend={() => setSheet("send")}
                       onCreateVault={() => setSheet("createVault")}
                     />
                   )}
@@ -127,7 +133,6 @@ export function AppShell() {
             <Fab
               onCreateVault={() => setSheet("createVault")}
               onAddFunds={() => openDeposit()}
-              onSend={() => setSheet("send")}
               onWithdraw={() => openWithdraw()}
             />
           </div>
@@ -146,7 +151,6 @@ export function AppShell() {
           onClose={() => { setSheet(null); setWithdrawVault(null); }}
           vaultContext={withdrawVault}
         />
-        <SendSheet open={sheet === "send"} onClose={() => setSheet(null)} />
         <VaultDetailSheet
           open={sheet === "vaultDetail"}
           vault={activeVault}

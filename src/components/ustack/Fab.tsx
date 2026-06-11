@@ -1,11 +1,10 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Vault, ArrowDownToLine, Send, ArrowUpFromLine } from "lucide-react";
+import { Plus, Vault, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { useState } from "react";
 
-export function Fab({ onCreateVault, onAddFunds, onSend, onWithdraw }: {
+export function Fab({ onCreateVault, onAddFunds, onWithdraw }: {
   onCreateVault: () => void;
   onAddFunds: () => void;
-  onSend: () => void;
   onWithdraw: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -13,13 +12,12 @@ export function Fab({ onCreateVault, onAddFunds, onSend, onWithdraw }: {
   const actions = [
     { label: "Create Vault", Icon: Vault,           color: "oklch(0.78 0.13 195)", onClick: onCreateVault },
     { label: "Add Funds",    Icon: ArrowDownToLine, color: "oklch(0.85 0.12 165)", onClick: onAddFunds },
-    { label: "Send",         Icon: Send,            color: "oklch(0.78 0.11 220)", onClick: onSend },
     { label: "Withdraw",     Icon: ArrowUpFromLine, color: "oklch(0.72 0.18 25)",  onClick: onWithdraw },
   ];
 
   const radius = 110;
-  const startDeg = -160;
-  const endDeg = -20;
+  const startDeg = -150;
+  const endDeg = -30;
   const step = (endDeg - startDeg) / (actions.length - 1);
 
   return (
@@ -70,8 +68,7 @@ export function Fab({ onCreateVault, onAddFunds, onSend, onWithdraw }: {
           whileTap={{ scale: 0.92 }}
           animate={{ rotate: open ? 135 : 0 }}
           transition={{ type: "spring", stiffness: 300, damping: 18 }}
-          className="relative grid h-16 w-16 place-items-center rounded-full"
-          style={{ background: "oklch(0.73 0.19 55)" }}
+          className="relative grid h-16 w-16 place-items-center rounded-full bg-primary"
           aria-label={open ? "Close actions" : "Open actions"}
         >
           <Plus className="h-7 w-7 text-white" />

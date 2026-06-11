@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, Send, Eye, EyeOff, Flame, ShieldCheck, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Eye, EyeOff, Flame, ShieldCheck, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
 import { tips, fmtSats, fmtBTC, fmtZMW, type Vault } from "@/lib/ustack-data";
 import { CountUp } from "../CountUp";
 import { ProgressRing } from "../ProgressRing";
@@ -11,11 +11,10 @@ import { useActivity } from "@/lib/hooks/useAppData";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 import { useAuth } from "@/lib/context/auth-context";
 
-export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onSend, onCreateVault }: {
+export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }: {
   onOpenVault: (v: Vault) => void;
   onDeposit: () => void;
   onWithdraw: () => void;
-  onSend: () => void;
   onCreateVault: () => void;
 }) {
   const [hidden, setHidden] = useState(false);
@@ -108,10 +107,9 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onSend, onCreat
       <PriceTicker />
 
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <QuickAction icon={ArrowDownToLine} label="Deposit" onClick={onDeposit} accent="oklch(0.73 0.19 55)" />
         <QuickAction icon={ArrowUpFromLine} label="Withdraw" onClick={onWithdraw} accent="oklch(0.78 0.14 190)" />
-        <QuickAction icon={Send} label="Send" onClick={onSend} accent="oklch(0.86 0.13 160)" />
       </div>
 
       {/* Vault carousel */}
