@@ -108,8 +108,8 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
 
       {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3">
-        <QuickAction icon={Zap} label="Add Sats" onClick={onDeposit} accent="oklch(0.73 0.19 55)" />
-        <QuickAction icon={ArrowLeftRight} label="Transfer" onClick={onWithdraw} accent="oklch(0.78 0.14 190)" />
+        <QuickAction icon={Zap} label="Add Sats" onClick={onDeposit} accent="var(--primary)" />
+        <QuickAction icon={ArrowLeftRight} label="Transfer" onClick={onWithdraw} accent="var(--primary)" />
       </div>
 
       {/* Vault carousel */}
