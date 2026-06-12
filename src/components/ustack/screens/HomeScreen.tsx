@@ -10,6 +10,7 @@ import { useVaults } from "@/lib/hooks/useAppData";
 import { useActivity } from "@/lib/hooks/useAppData";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 import { useAuth } from "@/lib/context/auth-context";
+import { useCurrency } from "@/lib/currency-context";
 
 export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }: {
   onOpenVault: (v: Vault) => void;
@@ -26,6 +27,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
 
   const { data: btcPrice } = useBtcPrice();
   const priceZmw = btcPrice?.priceZmw;
+  const { fmtValue } = useCurrency();
 
   const totalSats = wallet?.totalSats ?? 0;
   const lockedSats = wallet?.vaultSats ?? 0;
@@ -63,12 +65,12 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
         <div className="relative -mt-1 flex items-center gap-3">
           <span className="text-sm text-muted-foreground">≈ {fmtBTC(totalSats)} BTC</span>
           <span className="text-white/20 text-xs">·</span>
-          <span className="text-sm font-medium text-foreground/80">{hidden ? "•••" : fmtZMW(totalSats, priceZmw)}</span>
+          <span className="text-sm font-medium text-foreground/80">{hidden ? "•••" : fmtValue(totalSats, priceZmw)}</span>
         </div>
 
         <div className="relative mt-5 grid grid-cols-2 gap-3">
-          <Stat label="Locked" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtZMW(lockedSats, priceZmw)} accent="coral" />
-          <Stat label="Available" value={hidden ? "•••" : fmtSats(availableSats)} zmw={hidden ? undefined : fmtZMW(availableSats, priceZmw)} accent="teal" />
+          <Stat label="Locked" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtValue(lockedSats, priceZmw)} accent="coral" />
+          <Stat label="Available" value={hidden ? "•••" : fmtSats(availableSats)} zmw={hidden ? undefined : fmtValue(availableSats, priceZmw)} accent="teal" />
         </div>
 
         {/* monthly progress */}

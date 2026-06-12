@@ -140,7 +140,7 @@ export function AppShell() {
 
         {/* Sheets */}
         <NotificationsSheet open={sheet === "notifications"} onClose={() => setSheet(null)} />
-        <CreateVaultSheet open={sheet === "createVault"} onClose={() => setSheet(null)} onDeposit={() => openDeposit()} />
+        <CreateVaultSheet open={sheet === "createVault"} onClose={() => setSheet(null)} onDeposit={(vault) => openDeposit(vault)} />
         <DepositSheet
           open={sheet === "deposit"}
           onClose={() => { setSheet(null); setDepositVault(null); }}

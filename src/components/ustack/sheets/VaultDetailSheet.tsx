@@ -4,6 +4,7 @@ import { ProgressRing } from "../ProgressRing";
 import type { Vault } from "@/lib/ustack-data";
 import { fmtZMW } from "@/lib/ustack-data";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
+import { useCurrency } from "@/lib/currency-context";
 
 const accentMap = { coral: "oklch(0.73 0.19 55)", teal: "oklch(0.78 0.14 190)", mint: "oklch(0.86 0.13 160)", aqua: "oklch(0.78 0.14 190)", btc: "oklch(0.74 0.18 55)" } as const;
 
@@ -12,6 +13,7 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
 }) {
   const { data: btcPrice } = useBtcPrice();
   const priceZmw = btcPrice?.priceZmw;
+  const { fmtValue } = useCurrency();
 
   if (!vault) return <Sheet open={open} onClose={onClose}><div /></Sheet>;
   const pct = vault.currentSats / vault.goalSats;
@@ -30,9 +32,9 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
               {vault.type === "hodl" ? <Lock className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
               {vault.type === "hodl" ? "Hodl Vault" : "Stack Vault"}
             </div>
-            <div className="text-2xl font-semibold tabular-nums mt-1">{fmtZMW(vault.currentSats, priceZmw)}</div>
+            <div className="text-2xl font-semibold tabular-nums mt-1">{fmtValue(vault.currentSats, priceZmw)}</div>
             <div className="text-xs text-muted-foreground">{vault.currentSats.toLocaleString()} sats</div>
-            <div className="text-[10px] text-muted-foreground/60 mt-0.5">of {fmtZMW(vault.goalSats, priceZmw)} goal</div>
+            <div className="text-[10px] text-muted-foreground/60 mt-0.5">of {fmtValue(vault.goalSats, priceZmw)} goal</div>
           </div>
         </div>
       </div>

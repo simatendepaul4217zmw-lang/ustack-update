@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Lock, TrendingUp, ChevronRight, ChevronLeft, ShieldCheck, Sparkles, Clock, Loader2 } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { useCreateVault } from "@/lib/hooks/useAppData";
+import type { Vault } from "@/lib/ustack-data";
 
 const LOCK_OPTIONS = [
   { months: 1, label: "1 month" },
@@ -21,7 +22,7 @@ const ACCENTS = [
   { value: "aqua" as const, label: "Aqua", color: "oklch(0.78 0.14 190)" },
 ];
 
-export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; onClose: () => void; onDeposit: () => void }) {
+export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; onClose: () => void; onDeposit: (vault: Vault) => void }) {
   const [step, setStep] = useState(0);
   const [type, setType] = useState<"hodl" | "stack">("stack");
   const [name, setName] = useState("");
@@ -50,7 +51,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
 
   const handleCreate = async () => {
     try {
-      await createVault({
+      const newVault = await createVault({
         name: name.trim() || "My Vault",
         vaultType: type,
         emoji,
@@ -60,7 +61,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
         lockMonths: type === "hodl" ? lockMonths : 0,
       });
       close();
-      setTimeout(onDeposit, 400);
+      setTimeout(() => onDeposit(newVault), 400);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create vault");
     }

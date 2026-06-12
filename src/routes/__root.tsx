@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { ThemeProvider } from "@/lib/theme-context";
 import { AuthProvider } from "@/lib/context/auth-context";
+import { CurrencyProvider } from "@/lib/currency-context";
 
 import appCss from "../styles.css?url";
 
@@ -115,11 +116,13 @@ function RootComponent() {
 
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <Outlet />
-        </AuthProvider>
-      </QueryClientProvider>
+      <CurrencyProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <Outlet />
+          </AuthProvider>
+        </QueryClientProvider>
+      </CurrencyProvider>
     </ThemeProvider>
   );
 }
