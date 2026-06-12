@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { verifyToken } from "../auth.server";
-import { createLightningInvoice, payLightningInvoice, confirmMockPayment } from "./blink.server";
+import { createLightningInvoice, payLightningInvoice, confirmMockPayment, getLightningInvoiceStatus } from "./blink.server";
 import { execute, queryOne } from "../db/index.server";
 import { creditWallet } from "./wallet.functions";
 import { requestPayment, disburseFunds, getLipilaStatus } from "./lipila.server";
@@ -71,7 +71,8 @@ export const sendPayment = createServerFn({ method: "POST" })
     }
   });
 
-// Poll whether a Lightning invoice has been paid
+// Poll whether a Lightning invoice has been paid.
+// Checks DB first; if still pending, queries Blink directly and auto-confirms.
 export const checkInvoiceStatus = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
@@ -81,18 +82,52 @@ export const checkInvoiceStatus = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
-    const tx = await queryOne<{ status: string; amount_sats: string }>(
-      `SELECT status, amount_sats FROM transactions
+    const tx = await queryOne<{ id: string; status: string; amount_sats: string; lightning_invoice: string }>(
+      `SELECT id, status, amount_sats, lightning_invoice FROM transactions
        WHERE lightning_payment_hash=$1 AND user_id=$2 LIMIT 1`,
       [data.paymentHash, payload.sub]
     );
 
     if (!tx) return { status: "pending" as const, amountSats: 0 };
 
-    return {
-      status: tx.status as "pending" | "confirmed" | "failed",
-      amountSats: Number(tx.amount_sats),
-    };
+    // Already confirmed or failed — return immediately
+    if (tx.status !== "pending") {
+      return {
+        status: tx.status as "confirmed" | "failed",
+        amountSats: Number(tx.amount_sats),
+      };
+    }
+
+    // Still pending — ask Blink directly
+    const blinkStatus = await getLightningInvoiceStatus(tx.lightning_invoice);
+
+    if (blinkStatus === "PAID") {
+      await execute(
+        `UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`,
+        [tx.id]
+      );
+      await creditWallet(payload.sub, Number(tx.amount_sats));
+      await execute(
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+        [payload.sub, `Added ${Number(tx.amount_sats).toLocaleString()} sats`, "Lightning deposit confirmed"]
+      );
+      await execute(
+        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+        [payload.sub, "Lightning deposit confirmed",
+         `Your deposit of ${Number(tx.amount_sats).toLocaleString()} sats has arrived.`]
+      );
+      return { status: "confirmed" as const, amountSats: Number(tx.amount_sats) };
+    }
+
+    if (blinkStatus === "EXPIRED") {
+      await execute(
+        `UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`,
+        [tx.id]
+      );
+      return { status: "failed" as const, amountSats: Number(tx.amount_sats) };
+    }
+
+    return { status: "pending" as const, amountSats: Number(tx.amount_sats) };
   });
 
 // DEV ONLY: simulate payment confirmation for mock invoices

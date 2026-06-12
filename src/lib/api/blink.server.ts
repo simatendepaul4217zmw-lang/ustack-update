@@ -207,6 +207,40 @@ export async function payLightningInvoice(
   return { success: true };
 }
 
+// Query Blink directly for invoice payment status
+export async function getLightningInvoiceStatus(
+  paymentRequest: string
+): Promise<"PENDING" | "PAID" | "EXPIRED"> {
+  const config = getServerConfig();
+  if (config.mockBlink) return "PENDING";
+
+  const res = await fetch(config.blinkApiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": config.blinkApiKey!,
+    },
+    body: JSON.stringify({
+      query: `query LnInvoicePaymentStatus($input: LnInvoicePaymentStatusInput!) {
+        lnInvoicePaymentStatus(input: $input) {
+          status
+          errors { message }
+        }
+      }`,
+      variables: { input: { paymentRequest } },
+    }),
+  });
+
+  const json = await res.json() as {
+    data?: { lnInvoicePaymentStatus?: { status: string; errors?: { message: string }[] } };
+  };
+
+  const status = json.data?.lnInvoicePaymentStatus?.status ?? "PENDING";
+  if (status === "PAID") return "PAID";
+  if (status === "EXPIRED") return "EXPIRED";
+  return "PENDING";
+}
+
 // Confirm a mock invoice payment (dev/testing tool)
 export async function confirmMockPayment(paymentHash: string): Promise<void> {
   const tx = await queryOne<{ user_id: string; amount_sats: string }>(
