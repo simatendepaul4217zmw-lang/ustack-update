@@ -4,7 +4,7 @@ import { getWallet } from "@/lib/api/wallet.functions";
 import { getVaults, createVault, depositToVault, withdrawFromVault } from "@/lib/api/vault.functions";
 import { getActivity, getNotifications, markNotificationsRead } from "@/lib/api/activity.functions";
 import { getBtcPrice } from "@/lib/api/price.functions";
-import { createInvoice, sendPayment, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus } from "@/lib/api/lightning.functions";
+import { createInvoice, sendPayment, sendOnChainPayment, estimateOnChainFee, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus } from "@/lib/api/lightning.functions";
 import { updateProfile } from "@/lib/api/auth.functions";
 import { getPriceProtection, updatePriceProtection } from "@/lib/api/priceprotection.functions";
 
@@ -140,6 +140,30 @@ export function useSendPayment() {
       qc.invalidateQueries({ queryKey: ["wallet"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
     },
+  });
+}
+
+export function useSendOnChainPayment() {
+  const { token } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { address: string; amountSats: number }) =>
+      sendOnChainPayment({ data: { ...vars, token: token! } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["activity"] });
+    },
+  });
+}
+
+export function useEstimateOnChainFee(address: string, amountSats: number) {
+  const { token } = useAuth();
+  const valid = /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/.test(address.trim()) && amountSats > 0;
+  return useQuery({
+    queryKey: ["onchain-fee", address, amountSats],
+    queryFn: () => estimateOnChainFee({ data: { token: token!, address: address.trim(), amountSats } }),
+    enabled: !!token && valid,
+    staleTime: 30_000,
   });
 }
 

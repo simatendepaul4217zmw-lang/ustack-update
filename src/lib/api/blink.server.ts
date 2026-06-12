@@ -332,6 +332,82 @@ export async function getLightningInvoiceStatus(
   return "PENDING";
 }
 
+// Get estimated on-chain fee for a send (sats)
+export async function getOnChainFee(
+  address: string,
+  amountSats: number
+): Promise<number> {
+  const config = getServerConfig();
+  if (config.mockBlink) return 500; // mock fee
+
+  const walletId = config.blinkWalletId;
+  const res = await fetch(config.blinkApiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-KEY": config.blinkApiKey! },
+    body: JSON.stringify({
+      query: `query OnChainTxFee($walletId: WalletId!, $address: OnChainAddress!, $amount: SatAmount!) {
+        onChainTxFee(walletId: $walletId, address: $address, amount: $amount) { amount }
+      }`,
+      variables: { walletId, address, amount: amountSats },
+    }),
+  });
+  const json = await res.json();
+  return json?.data?.onChainTxFee?.amount ?? 0;
+}
+
+// Send sats to a Bitcoin on-chain address
+export async function payOnChain(
+  userId: string,
+  address: string,
+  amountSats: number
+): Promise<{ success: boolean; status: "SUCCESS" | "PENDING" }> {
+  const config = getServerConfig();
+
+  // Record transaction row
+  const txStatus = config.mockBlink ? "confirmed" : "pending";
+  await execute(
+    `INSERT INTO transactions(user_id, type, amount_sats, currency, status, meta)
+     VALUES($1,'withdraw',$2,'BTC',$3,$4)`,
+    [userId, amountSats, txStatus, JSON.stringify({ channel: "onchain", address })]
+  );
+
+  if (config.mockBlink) return { success: true, status: "SUCCESS" };
+
+  const walletId = config.blinkWalletId;
+  const res = await fetch(config.blinkApiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-KEY": config.blinkApiKey! },
+    body: JSON.stringify({
+      query: `mutation OnChainPaymentSend($input: OnChainPaymentSendInput!) {
+        onChainPaymentSend(input: $input) {
+          status
+          errors { message }
+        }
+      }`,
+      variables: { input: { walletId, address, amount: amountSats } },
+    }),
+  });
+  const json = await res.json();
+  const result = json?.data?.onChainPaymentSend;
+  const errors = result?.errors;
+
+  if (errors?.length) throw new Error(errors[0].message);
+
+  const status = result?.status;
+  console.log("[payOnChain] Blink response:", JSON.stringify(result));
+
+  if (status === "FAILURE") throw new Error("On-chain payment failed");
+
+  await execute(
+    `UPDATE transactions SET status=$1, updated_at=NOW()
+     WHERE user_id=$2 AND type='withdraw' AND meta->>'channel'='onchain' AND meta->>'address'=$3
+     ORDER BY created_at DESC LIMIT 1`,
+    [status === "SUCCESS" ? "confirmed" : "pending", userId, address]
+  );
+
+  return { success: true, status: status === "SUCCESS" ? "SUCCESS" : "PENDING" };
+}
+
 // Confirm a mock invoice payment (dev/testing tool)
 export async function confirmMockPayment(paymentHash: string): Promise<void> {
   const tx = await queryOne<{ user_id: string; amount_sats: string }>(

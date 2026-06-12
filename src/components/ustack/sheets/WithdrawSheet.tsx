@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { fmtSats, fmtZMW, type Vault } from "@/lib/ustack-data";
-import { useWallet, useVaults, useWithdrawFromVault, useSendPayment } from "@/lib/hooks/useAppData";
+import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee } from "@/lib/hooks/useAppData";
 
 type Step = "source" | "vault" | "locked" | "amount" | "warning" | "done";
 type Source = "balance" | "vault";
@@ -40,6 +40,8 @@ export function WithdrawSheet({
   const { data: vaults = [] } = useVaults();
   const withdrawFromVault = useWithdrawFromVault();
   const sendPayment = useSendPayment();
+  const sendOnChain = useSendOnChainPayment();
+  const feeQuery = useEstimateOnChainFee(onchainAddress, Number(amount) || 0);
 
   const availableSats = wallet?.availableSats ?? 0;
 
@@ -107,17 +109,18 @@ export function WithdrawSheet({
         await withdrawFromVault.mutateAsync({ vaultId: vault.id, amountSats: Number(amount) });
       } else if (source === "balance" && method === "lightning") {
         await sendPayment.mutateAsync({ paymentRequest: address.trim(), amountSats: Number(amount) });
+      } else if (source === "balance" && method === "onchain") {
+        await sendOnChain.mutateAsync({ address: onchainAddress.trim(), amountSats: Number(amount) });
       } else if (source === "balance" && method === "momo") {
         await sendPayment.mutateAsync({ paymentRequest: `momo:${phone.trim()}`, amountSats: Number(amount) });
       }
-      // onchain: UI flow completes; server-side send handled separately
       setStep("done");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Withdrawal failed");
     }
   };
 
-  const isPending = withdrawFromVault.isPending || sendPayment.isPending;
+  const isPending = withdrawFromVault.isPending || sendPayment.isPending || sendOnChain.isPending;
 
   const methodLabel = method === "lightning" ? "Lightning" : method === "onchain" ? "On-chain" : "Mobile Money";
 
@@ -300,7 +303,16 @@ export function WithdrawSheet({
                   </div>
                   <div className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
                     <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                    <p className="text-xs text-muted-foreground">On-chain transfers typically confirm in ~10 minutes and may incur a network fee.</p>
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground">On-chain transfers confirm in ~10 minutes. A network fee will be deducted from the amount.</p>
+                      {feeQuery.data && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Estimated fee: <span className="text-foreground font-medium">{feeQuery.data.feeSats.toLocaleString()} sats</span>
+                          {" · "}You receive: <span className="text-foreground font-medium">{(Number(amount) - feeQuery.data.feeSats).toLocaleString()} sats</span>
+                        </p>
+                      )}
+                      {feeQuery.isFetching && <p className="text-xs text-muted-foreground mt-1">Estimating fee…</p>}
+                    </div>
                   </div>
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}

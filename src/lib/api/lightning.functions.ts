@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { verifyToken } from "../auth.server";
-import { createLightningInvoice, payLightningInvoice, payLightningAddress, confirmMockPayment, getLightningInvoiceStatus } from "./blink.server";
+import { createLightningInvoice, payLightningInvoice, payLightningAddress, payOnChain, getOnChainFee, confirmMockPayment, getLightningInvoiceStatus } from "./blink.server";
 import { execute, queryOne } from "../db/index.server";
 import { creditWallet } from "./wallet.functions";
 import { requestPayment, disburseFunds, getLipilaStatus } from "./lipila.server";
@@ -107,6 +107,72 @@ export const sendPayment = createServerFn({ method: "POST" })
       return result;
     } catch (err) {
       // Refund balance on failure
+      await execute(
+        `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+        [data.amountSats, payload.sub]
+      );
+      throw err;
+    }
+  });
+
+export const estimateOnChainFee = createServerFn({ method: "POST" })
+  .inputValidator(z.object({
+    token: z.string(),
+    address: z.string(),
+    amountSats: z.number().int().positive(),
+  }))
+  .handler(async ({ data }) => {
+    const payload = await verifyToken(data.token);
+    if (!payload) throw new Error("Unauthorized");
+    const fee = await getOnChainFee(data.address, data.amountSats);
+    return { feeSats: fee };
+  });
+
+export const sendOnChainPayment = createServerFn({ method: "POST" })
+  .inputValidator(z.object({
+    token: z.string(),
+    address: z.string(),
+    amountSats: z.number().int().positive(),
+  }))
+  .handler(async ({ data }) => {
+    const payload = await verifyToken(data.token);
+    if (!payload) throw new Error("Unauthorized");
+
+    const wallet = await queryOne<{ available_sats: string }>(
+      `SELECT available_sats FROM wallets WHERE user_id=$1`, [payload.sub]
+    );
+    if (!wallet || Number(wallet.available_sats) < data.amountSats) {
+      throw new Error("Insufficient balance");
+    }
+
+    await execute(
+      `UPDATE wallets SET available_sats=available_sats-$1, updated_at=NOW() WHERE user_id=$2`,
+      [data.amountSats, payload.sub]
+    );
+
+    try {
+      const result = await payOnChain(payload.sub, data.address, data.amountSats);
+
+      await execute(
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+        [
+          payload.sub,
+          `Sent ${data.amountSats.toLocaleString()} sats`,
+          result.status === "PENDING" ? "On-chain · confirming (~10 min)" : "On-chain · confirmed",
+        ]
+      );
+
+      await execute(
+        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
+        [
+          payload.sub,
+          "On-chain payment sent",
+          `${data.amountSats.toLocaleString()} sats sent to ${data.address.slice(0, 12)}…`,
+        ]
+      );
+
+      return result;
+    } catch (err) {
       await execute(
         `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
         [data.amountSats, payload.sub]
