@@ -162,7 +162,7 @@ export async function payLightningInvoice(
   userId: string,
   paymentRequest: string,
   amountSats: number
-): Promise<{ success: boolean; paymentHash?: string }> {
+): Promise<{ success: boolean; status: "SUCCESS" | "PENDING"; paymentHash?: string }> {
   const config = getServerConfig();
 
   if (config.mockBlink) {
@@ -172,7 +172,7 @@ export async function payLightningInvoice(
        VALUES($1,'withdraw',$2,'confirmed','lightning',$3,$4)`,
       [userId, amountSats, paymentRequest, hash]
     );
-    return { success: true, paymentHash: hash };
+    return { success: true, status: "SUCCESS", paymentHash: hash };
   }
 
   const walletId = await getBlinkWalletId(config);
@@ -188,6 +188,7 @@ export async function payLightningInvoice(
         lnInvoicePaymentSend(input: $input) {
           status
           errors { message }
+          transaction { id settlementAmount }
         }
       }`,
       variables: {
@@ -197,14 +198,104 @@ export async function payLightningInvoice(
   });
 
   const json = await res.json() as {
-    data?: { lnInvoicePaymentSend?: { status: string; errors?: { message: string }[] } };
+    data?: {
+      lnInvoicePaymentSend?: {
+        status: string;
+        errors?: { message: string }[];
+        transaction?: { id: string; settlementAmount: number };
+      };
+    };
+    errors?: { message: string }[];
   };
+
+  console.log("[blink] lnInvoicePaymentSend response:", JSON.stringify(json));
+
   const result = json.data?.lnInvoicePaymentSend;
-  if (!result || result.status === "FAILURE") {
-    throw new Error(result?.errors?.[0]?.message ?? "Payment failed");
+
+  if (!result || result.status === "FAILURE" || result.status === "ALREADY_PAID") {
+    const msg =
+      result?.errors?.[0]?.message ??
+      json.errors?.[0]?.message ??
+      `Payment failed (status: ${result?.status ?? "unknown"})`;
+    throw new Error(msg);
   }
 
-  return { success: true };
+  // SUCCESS or PENDING — both mean the payment was accepted
+  const txStatus = result.status === "SUCCESS" ? "confirmed" : "pending";
+  const paymentHash = result.transaction?.id ?? `blink_${Date.now()}`;
+
+  await execute(
+    `INSERT INTO transactions(user_id, type, amount_sats, status, method, lightning_invoice, lightning_payment_hash)
+     VALUES($1,'withdraw',$2,$3,'lightning',$4,$5)`,
+    [userId, amountSats, txStatus, paymentRequest, paymentHash]
+  );
+
+  return { success: true, status: result.status === "SUCCESS" ? "SUCCESS" : "PENDING", paymentHash };
+}
+
+// Pay a Lightning Address (user@domain.com) via Blink
+export async function payLightningAddress(
+  userId: string,
+  lnAddress: string,
+  amountSats: number
+): Promise<{ success: boolean; status: "SUCCESS" | "PENDING" }> {
+  const config = getServerConfig();
+
+  if (config.mockBlink) {
+    const hash = `mock_lnaddr_${Date.now()}`;
+    await execute(
+      `INSERT INTO transactions(user_id, type, amount_sats, status, method, lightning_invoice, lightning_payment_hash)
+       VALUES($1,'withdraw',$2,'confirmed','lightning',$3,$4)`,
+      [userId, amountSats, lnAddress, hash]
+    );
+    return { success: true, status: "SUCCESS" };
+  }
+
+  const walletId = await getBlinkWalletId(config);
+
+  const res = await fetch(config.blinkApiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": config.blinkApiKey!,
+    },
+    body: JSON.stringify({
+      query: `mutation LnAddressPaymentSend($input: LnAddressPaymentInput!) {
+        lnAddressPaymentSend(input: $input) {
+          status
+          errors { message }
+        }
+      }`,
+      variables: {
+        input: { walletId, lnAddress, amount: amountSats, memo: "UStack withdrawal" },
+      },
+    }),
+  });
+
+  const json = await res.json() as {
+    data?: { lnAddressPaymentSend?: { status: string; errors?: { message: string }[] } };
+    errors?: { message: string }[];
+  };
+
+  console.log("[blink] lnAddressPaymentSend response:", JSON.stringify(json));
+
+  const result = json.data?.lnAddressPaymentSend;
+  if (!result || result.status === "FAILURE") {
+    const msg =
+      result?.errors?.[0]?.message ??
+      json.errors?.[0]?.message ??
+      "Lightning address payment failed";
+    throw new Error(msg);
+  }
+
+  const txStatus = result.status === "SUCCESS" ? "confirmed" : "pending";
+  await execute(
+    `INSERT INTO transactions(user_id, type, amount_sats, status, method, lightning_invoice, lightning_payment_hash)
+     VALUES($1,'withdraw',$2,$3,'lightning',$4,$5)`,
+    [userId, amountSats, txStatus, lnAddress, `lnaddr_${Date.now()}`]
+  );
+
+  return { success: true, status: result.status === "SUCCESS" ? "SUCCESS" : "PENDING" };
 }
 
 // Query Blink directly for invoice payment status

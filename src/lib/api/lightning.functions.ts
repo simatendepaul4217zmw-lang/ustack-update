@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { verifyToken } from "../auth.server";
-import { createLightningInvoice, payLightningInvoice, confirmMockPayment, getLightningInvoiceStatus } from "./blink.server";
+import { createLightningInvoice, payLightningInvoice, payLightningAddress, confirmMockPayment, getLightningInvoiceStatus } from "./blink.server";
 import { execute, queryOne } from "../db/index.server";
 import { creditWallet } from "./wallet.functions";
 import { requestPayment, disburseFunds, getLipilaStatus } from "./lipila.server";
@@ -37,6 +37,11 @@ export const createInvoice = createServerFn({ method: "POST" })
     return createLightningInvoice(payload.sub, data.amountSats, data.memo);
   });
 
+// Detects if a string is a Lightning Address (user@domain.com)
+function isLightningAddress(s: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.trim());
+}
+
 export const sendPayment = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
@@ -54,15 +59,54 @@ export const sendPayment = createServerFn({ method: "POST" })
       throw new Error("Insufficient balance");
     }
 
+    const destination = data.paymentRequest.trim();
+    const isLnAddress = isLightningAddress(destination);
+    const isInvoice = destination.toLowerCase().startsWith("lnbc") ||
+                      destination.toLowerCase().startsWith("lntb") ||
+                      destination.toLowerCase().startsWith("lnurl");
+
+    if (!isLnAddress && !isInvoice) {
+      throw new Error("Invalid Lightning invoice or address");
+    }
+
+    // Deduct balance optimistically
     await execute(
       `UPDATE wallets SET available_sats=available_sats-$1, updated_at=NOW() WHERE user_id=$2`,
       [data.amountSats, payload.sub]
     );
 
     try {
-      const result = await payLightningInvoice(payload.sub, data.paymentRequest, data.amountSats);
+      let result: { success: boolean; status: "SUCCESS" | "PENDING" };
+
+      if (isLnAddress) {
+        result = await payLightningAddress(payload.sub, destination, data.amountSats);
+      } else {
+        result = await payLightningInvoice(payload.sub, destination, data.amountSats);
+      }
+
+      // Record activity log
+      await execute(
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+        [
+          payload.sub,
+          `Sent ${data.amountSats.toLocaleString()} sats`,
+          result.status === "PENDING" ? "Lightning · pending confirmation" : "Lightning · confirmed",
+        ]
+      );
+
+      // Record notification
+      await execute(
+        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
+        [
+          payload.sub,
+          "Lightning payment sent",
+          `${data.amountSats.toLocaleString()} sats sent${result.status === "PENDING" ? " (confirming…)" : ""}`,
+        ]
+      );
+
       return result;
     } catch (err) {
+      // Refund balance on failure
       await execute(
         `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
         [data.amountSats, payload.sub]

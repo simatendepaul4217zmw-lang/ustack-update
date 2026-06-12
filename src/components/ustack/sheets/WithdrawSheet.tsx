@@ -82,9 +82,19 @@ export function WithdrawSheet({
   const isValidOnchain = (addr: string) =>
     /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/.test(addr.trim());
 
+  const isValidLightning = (s: string) => {
+    const t = s.trim().toLowerCase();
+    return (
+      t.startsWith("lnbc") ||
+      t.startsWith("lntb") ||
+      t.startsWith("lnurl") ||
+      /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t)  // Lightning Address
+    );
+  };
+
   const canContinue = () => {
     if (!amount || Number(amount) <= 0 || Number(amount) > maxAmount) return false;
-    if (method === "lightning" && address.trim().length < 6) return false;
+    if (method === "lightning" && !isValidLightning(address)) return false;
     if (method === "momo" && phone.trim().length < 9) return false;
     if (method === "onchain" && !isValidOnchain(onchainAddress)) return false;
     return true;
@@ -95,8 +105,10 @@ export function WithdrawSheet({
     try {
       if (source === "vault" && vault) {
         await withdrawFromVault.mutateAsync({ vaultId: vault.id, amountSats: Number(amount) });
-      } else if (source === "balance" && method === "lightning" && address.trim().startsWith("lnbc")) {
+      } else if (source === "balance" && method === "lightning") {
         await sendPayment.mutateAsync({ paymentRequest: address.trim(), amountSats: Number(amount) });
+      } else if (source === "balance" && method === "momo") {
+        await sendPayment.mutateAsync({ paymentRequest: `momo:${phone.trim()}`, amountSats: Number(amount) });
       }
       // onchain: UI flow completes; server-side send handled separately
       setStep("done");
