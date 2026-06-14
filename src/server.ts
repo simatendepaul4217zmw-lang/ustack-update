@@ -4,9 +4,14 @@ import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { startPriceLoop } from "./lib/api/price-loop.server";
 import { handleTreasuryApi } from "./lib/api/treasury-api.server";
+import { handleBlinkWebhook, handleLipilaWebhook } from "./lib/api/webhook-handlers.server";
+import { recoverStuckWithdrawals } from "./lib/api/recovery.server";
 
 // Start the price watch + treasury protection loop on server boot
 startPriceLoop();
+
+// Refund any withdrawals that were mid-flight when the server last crashed
+recoverStuckWithdrawals();
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -50,6 +55,25 @@ export default {
       // Handle treasury API routes directly (createAPIFileRoute doesn't work in Vite dev mode)
       if (url.pathname.startsWith("/api/treasury-")) {
         return await handleTreasuryApi(request, url.pathname);
+      }
+
+      // Handle webhook routes directly with mandatory signature verification
+      if (url.pathname === "/api/blink-webhook") {
+        if (request.method === "GET") {
+          return new Response(JSON.stringify({ ok: true, service: "UStack Blink webhook" }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          });
+        }
+        return await handleBlinkWebhook(request);
+      }
+
+      if (url.pathname === "/api/lipila-webhook") {
+        if (request.method === "GET") {
+          return new Response(JSON.stringify({ ok: true, service: "UStack Lipila webhook" }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          });
+        }
+        return await handleLipilaWebhook(request);
       }
 
       const handler = await getServerEntry();

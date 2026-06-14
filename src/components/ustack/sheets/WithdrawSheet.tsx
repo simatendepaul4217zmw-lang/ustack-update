@@ -98,11 +98,15 @@ export function WithdrawSheet({
     );
   };
 
+  const feeSats = feeQuery.data?.feeSats ?? 0;
+  const amountBelowFee = method === "onchain" && feeSats > 0 && Number(amount) > 0 && Number(amount) <= feeSats;
+
   const canContinue = () => {
     if (!amount || Number(amount) <= 0 || Number(amount) > maxAmount) return false;
     if (method === "lightning" && !isValidLightning(address)) return false;
     if (method === "momo" && phone.trim().length < 9) return false;
     if (method === "onchain" && !isValidOnchain(onchainAddress)) return false;
+    if (amountBelowFee) return false;
     return true;
   };
 
@@ -305,14 +309,19 @@ export function WithdrawSheet({
                       <p className="mt-1.5 text-xs text-destructive pl-1">Invalid Bitcoin address format</p>
                     )}
                   </div>
-                  <div className="flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 border ${amountBelowFee ? "bg-destructive/10 border-destructive/30" : "bg-white/5 border-white/10"}`}>
+                    <AlertTriangle className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${amountBelowFee ? "text-destructive" : "text-muted-foreground"}`} />
                     <div className="flex-1">
                       <p className="text-xs text-muted-foreground">On-chain transfers confirm in ~10 minutes. A network fee will be deducted from the amount.</p>
-                      {feeQuery.data && (
+                      {feeQuery.data && !amountBelowFee && (
                         <p className="text-xs text-muted-foreground mt-1">
                           Estimated fee: <span className="text-foreground font-medium">{feeQuery.data.feeSats.toLocaleString()} sats</span>
                           {" · "}You receive: <span className="text-foreground font-medium">{(Number(amount) - feeQuery.data.feeSats).toLocaleString()} sats</span>
+                        </p>
+                      )}
+                      {amountBelowFee && (
+                        <p className="text-xs text-destructive mt-1 font-medium">
+                          Amount must exceed the network fee ({feeSats.toLocaleString()} sats). Increase your withdrawal amount.
                         </p>
                       )}
                       {feeQuery.isFetching && <p className="text-xs text-muted-foreground mt-1">Estimating fee…</p>}
