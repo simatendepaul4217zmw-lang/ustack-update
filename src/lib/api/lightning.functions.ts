@@ -3,12 +3,11 @@ import { z } from "zod";
 import { verifyToken } from "../auth.server";
 import { createLightningInvoice, payLightningInvoice, payLightningAddress, payOnChain, getOnChainFee, confirmMockPayment, getLightningInvoiceStatus } from "./blink.server";
 import { execute, queryOne, withTransaction } from "../db/index.server";
-import { creditWallet } from "./wallet.functions";
+import { creditWallet, creditVault } from "./wallet.functions";
 import { requestPayment, disburseFunds, getLipilaStatus } from "./lipila.server";
 import { getServerConfig } from "../config.server";
 import { prepareWithdrawal, buildWithdrawalMeta } from "./withdrawal.service";
 
-// Helper: convert sats to ZMW using latest stored price
 async function satsToZmw(amountSats: number): Promise<number> {
   const row = await queryOne<{ price_zmw: string }>(
     `SELECT price_zmw FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
@@ -17,7 +16,6 @@ async function satsToZmw(amountSats: number): Promise<number> {
   return (amountSats / 100_000_000) * priceZmw;
 }
 
-// Helper: convert ZMW to sats
 async function zmwToSats(amountZmw: number): Promise<number> {
   const row = await queryOne<{ price_zmw: string }>(
     `SELECT price_zmw FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
@@ -31,14 +29,14 @@ export const createInvoice = createServerFn({ method: "POST" })
     token: z.string(),
     amountSats: z.number().int().positive(),
     memo: z.string().optional(),
+    vaultId: z.string().optional(),
   }))
   .handler(async ({ data }) => {
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
-    return createLightningInvoice(payload.sub, data.amountSats, data.memo);
+    return createLightningInvoice(payload.sub, data.amountSats, data.memo, data.vaultId);
   });
 
-// Detects if a string is a Lightning Address (user@domain.com)
 function isLightningAddress(s: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s.trim());
 }
@@ -63,12 +61,6 @@ export const sendPayment = createServerFn({ method: "POST" })
       throw new Error("Invalid Lightning invoice or address");
     }
 
-    // ── Atomic phase ─────────────────────────────────────────────────────────
-    // Lock the wallet row, verify balance, INSERT a sentinel transaction row
-    // (status='initiated'), and deduct balance — all in one DB transaction.
-    // If the server crashes after this commits but before the external call
-    // returns, the recovery job (recoverStuckWithdrawals) will find the
-    // 'initiated' row and refund the balance automatically.
     const sentinelId = await withTransaction(async (db) => {
       const row = await db.queryOne<{ available_sats: string }>(
         `SELECT available_sats FROM wallets WHERE user_id=$1 FOR UPDATE`,
@@ -92,7 +84,6 @@ export const sendPayment = createServerFn({ method: "POST" })
       return sentinel!.id;
     });
 
-    // ── External call (outside DB transaction) ────────────────────────────────
     try {
       const prep = await prepareWithdrawal(payload.sub, data.amountSats);
 
@@ -103,7 +94,6 @@ export const sendPayment = createServerFn({ method: "POST" })
         result = await payLightningInvoice(payload.sub, destination, data.amountSats);
       }
 
-      // Mark sentinel reconciled — the actual tx row was created inside blink.server
       await execute(
         `UPDATE transactions SET status='reconciled', updated_at=NOW() WHERE id=$1`,
         [sentinelId]
@@ -130,7 +120,6 @@ export const sendPayment = createServerFn({ method: "POST" })
 
       return { ...result, treasuryMode: prep.treasuryMode };
     } catch (err) {
-      // Refund and mark sentinel failed
       await execute(
         `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
         [data.amountSats, payload.sub]
@@ -166,7 +155,6 @@ export const sendOnChainPayment = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
-    // ── Atomic phase ─────────────────────────────────────────────────────────
     const sentinelId = await withTransaction(async (db) => {
       const row = await db.queryOne<{ available_sats: string }>(
         `SELECT available_sats FROM wallets WHERE user_id=$1 FOR UPDATE`,
@@ -190,7 +178,6 @@ export const sendOnChainPayment = createServerFn({ method: "POST" })
       return sentinel!.id;
     });
 
-    // ── External call (outside DB transaction) ────────────────────────────────
     try {
       const prep = await prepareWithdrawal(payload.sub, data.amountSats);
       const result = await payOnChain(payload.sub, data.address, data.amountSats);
@@ -233,8 +220,6 @@ export const sendOnChainPayment = createServerFn({ method: "POST" })
     }
   });
 
-// Poll whether a Lightning invoice has been paid.
-// Checks DB first; if still pending, queries Blink directly and auto-confirms.
 export const checkInvoiceStatus = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
@@ -244,8 +229,8 @@ export const checkInvoiceStatus = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
-    const tx = await queryOne<{ id: string; status: string; amount_sats: string; lightning_invoice: string }>(
-      `SELECT id, status, amount_sats, lightning_invoice FROM transactions
+    const tx = await queryOne<{ id: string; status: string; amount_sats: string; lightning_invoice: string; vault_id: string | null }>(
+      `SELECT id, status, amount_sats, lightning_invoice, vault_id FROM transactions
        WHERE lightning_payment_hash=$1 AND user_id=$2 LIMIT 1`,
       [data.paymentHash, payload.sub]
     );
@@ -262,18 +247,28 @@ export const checkInvoiceStatus = createServerFn({ method: "POST" })
     const blinkStatus = await getLightningInvoiceStatus(tx.lightning_invoice);
 
     if (blinkStatus === "PAID") {
+      const amountSats = Number(tx.amount_sats);
       await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
-      await creditWallet(payload.sub, Number(tx.amount_sats));
-      await execute(
-        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-        [payload.sub, `Added ${Number(tx.amount_sats).toLocaleString()} sats`, "Lightning deposit confirmed"]
-      );
+
+      if (tx.vault_id) {
+        await creditVault(payload.sub, tx.vault_id, amountSats);
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
+          [payload.sub, `Added ${amountSats.toLocaleString()} sats to vault`, "Lightning vault deposit confirmed"]
+        );
+      } else {
+        await creditWallet(payload.sub, amountSats);
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+          [payload.sub, `Added ${amountSats.toLocaleString()} sats`, "Lightning deposit confirmed"]
+        );
+      }
       await execute(
         `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
         [payload.sub, "Lightning deposit confirmed",
          `Your deposit of ${Number(tx.amount_sats).toLocaleString()} sats has arrived.`]
       );
-      return { status: "confirmed" as const, amountSats: Number(tx.amount_sats) };
+      return { status: "confirmed" as const, amountSats };
     }
 
     if (blinkStatus === "EXPIRED") {
@@ -284,7 +279,6 @@ export const checkInvoiceStatus = createServerFn({ method: "POST" })
     return { status: "pending" as const, amountSats: Number(tx.amount_sats) };
   });
 
-// DEV ONLY: simulate payment confirmation for mock invoices
 export const confirmMockInvoice = createServerFn({ method: "POST" })
   .inputValidator(z.object({ paymentHash: z.string() }))
   .handler(async ({ data }) => {
@@ -292,7 +286,6 @@ export const confirmMockInvoice = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-// Mobile money payout — send sats out converted to ZMW via Lipila
 export const mobileMoneyPayout = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
@@ -305,7 +298,6 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
-    // ── Atomic phase ─────────────────────────────────────────────────────────
     const sentinelId = await withTransaction(async (db) => {
       const row = await db.queryOne<{ available_sats: string }>(
         `SELECT available_sats FROM wallets WHERE user_id=$1 FOR UPDATE`,
@@ -386,13 +378,13 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
     }
   });
 
-// Mobile money deposit — request ZMW payment from user via Lipila
 export const mobileMoneySend = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
     phone: z.string(),
     amountSats: z.number().int().positive(),
     provider: z.enum(["airtel", "mtn", "zamtel"]),
+    vaultId: z.string().optional(),
   }))
   .handler(async ({ data }) => {
     const payload = await verifyToken(data.token);
@@ -402,14 +394,22 @@ export const mobileMoneySend = createServerFn({ method: "POST" })
 
     if (config.mockLipila) {
       await execute(
-        `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
-         VALUES($1,'deposit',$2,'confirmed','mobile_money',$3)`,
-        [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone, mock: true })]
+        `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata, vault_id)
+         VALUES($1,'deposit',$2,'confirmed','mobile_money',$3,$4)`,
+        [payload.sub, data.amountSats,
+         JSON.stringify({ provider: data.provider, phone: data.phone, mock: true }),
+         data.vaultId ?? null]
       );
-      await creditWallet(payload.sub, data.amountSats);
+      if (data.vaultId) {
+        await creditVault(payload.sub, data.vaultId, data.amountSats);
+      } else {
+        await creditWallet(payload.sub, data.amountSats);
+      }
       await execute(
-        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-        [payload.sub, `Added ${data.amountSats.toLocaleString()} sats`,
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,$2,$3,$4)`,
+        [payload.sub,
+         data.vaultId ? "vault_deposit" : "deposit",
+         `Added ${data.amountSats.toLocaleString()} sats`,
          `Mobile Money · ${data.provider.toUpperCase()}`]
       );
       return { ok: true, mock: true, amountSats: data.amountSats, pending: false };
@@ -419,9 +419,11 @@ export const mobileMoneySend = createServerFn({ method: "POST" })
     const externalId = `ustack-deposit-${Date.now()}-${payload.sub.slice(0, 8)}`;
 
     const txRow = await queryOne<{ id: string }>(
-      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
-       VALUES($1,'deposit',$2,'pending','mobile_money',$3) RETURNING id`,
-      [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone, amountZmw, externalId })]
+      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata, vault_id)
+       VALUES($1,'deposit',$2,'pending','mobile_money',$3,$4) RETURNING id`,
+      [payload.sub, data.amountSats,
+       JSON.stringify({ provider: data.provider, phone: data.phone, amountZmw, externalId }),
+       data.vaultId ?? null]
     );
 
     const result = await requestPayment({
@@ -444,7 +446,6 @@ export const mobileMoneySend = createServerFn({ method: "POST" })
     };
   });
 
-// Poll transaction status (for pending MoMo deposits)
 export const checkMomoStatus = createServerFn({ method: "POST" })
   .inputValidator(z.object({
     token: z.string(),
@@ -460,18 +461,27 @@ export const checkMomoStatus = createServerFn({ method: "POST" })
     const status = await getLipilaStatus(data.lipilaTransactionId);
 
     if (status.status === "SUCCESS") {
-      const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; status: string }>(
-        `SELECT id, user_id, amount_sats, status FROM transactions
+      const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; status: string; vault_id: string | null }>(
+        `SELECT id, user_id, amount_sats, status, vault_id FROM transactions
          WHERE metadata->>'lipilaTransactionId'=$1 AND user_id=$2`,
         [data.lipilaTransactionId, payload.sub]
       );
       if (tx && tx.status === "pending") {
+        const amountSats = Number(tx.amount_sats);
         await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
-        await creditWallet(tx.user_id, Number(tx.amount_sats));
-        await execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-          [tx.user_id, `Added ${Number(tx.amount_sats).toLocaleString()} sats`, `Mobile Money deposit confirmed`]
-        );
+        if (tx.vault_id) {
+          await creditVault(tx.user_id, tx.vault_id, amountSats);
+          await execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
+            [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Mobile Money vault deposit confirmed"]
+          );
+        } else {
+          await creditWallet(tx.user_id, amountSats);
+          await execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+            [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Mobile Money deposit confirmed"]
+          );
+        }
       }
     }
 

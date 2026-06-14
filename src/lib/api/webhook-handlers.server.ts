@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { execute, queryOne } from "../db/index.server";
-import { creditWallet } from "./wallet.functions";
+import { creditWallet, creditVault } from "./wallet.functions";
 import { getServerConfig } from "../config.server";
 
 function json(data: unknown, status = 200): Response {
@@ -33,7 +33,6 @@ export async function handleBlinkWebhook(request: Request): Promise<Response> {
   const config = getServerConfig();
   const rawBody = await request.text();
 
-  // Mandatory — reject if secret is not configured
   if (!config.blinkWebhookSecret) {
     console.error("[blink-webhook] BLINK_WEBHOOK_SECRET not set — rejecting all requests");
     return json({ error: "Webhook secret not configured on server" }, 500);
@@ -64,8 +63,8 @@ export async function handleBlinkWebhook(request: Request): Promise<Response> {
     return json({ ok: true, note: "not a settled receive" });
   }
 
-  const tx = await queryOne<{ id: string; user_id: string; amount_sats: string }>(
-    `SELECT id, user_id, amount_sats FROM transactions
+  const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; vault_id: string | null }>(
+    `SELECT id, user_id, amount_sats, vault_id FROM transactions
      WHERE lightning_payment_hash=$1 AND type='deposit' AND status='pending' LIMIT 1`,
     [paymentHash]
   );
@@ -74,18 +73,32 @@ export async function handleBlinkWebhook(request: Request): Promise<Response> {
 
   const amountSats = Number(tx.amount_sats);
   await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
-  await creditWallet(tx.user_id, amountSats);
-  await execute(
-    `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-    [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Lightning deposit confirmed"]
-  );
-  await execute(
-    `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
-    [tx.user_id, "Lightning deposit confirmed",
-     `Your deposit of ${amountSats.toLocaleString()} sats has arrived.`]
-  );
 
-  console.log(`[blink-webhook] Confirmed ${amountSats} sats for user ${tx.user_id}`);
+  if (tx.vault_id) {
+    await creditVault(tx.user_id, tx.vault_id, amountSats);
+    await execute(
+      `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
+      [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Lightning vault deposit confirmed"]
+    );
+    await execute(
+      `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+      [tx.user_id, "Vault deposit confirmed",
+       `Your deposit of ${amountSats.toLocaleString()} sats has been added to your vault.`]
+    );
+  } else {
+    await creditWallet(tx.user_id, amountSats);
+    await execute(
+      `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+      [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Lightning deposit confirmed"]
+    );
+    await execute(
+      `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+      [tx.user_id, "Lightning deposit confirmed",
+       `Your deposit of ${amountSats.toLocaleString()} sats has arrived.`]
+    );
+  }
+
+  console.log(`[blink-webhook] Confirmed ${amountSats} sats for user ${tx.user_id}${tx.vault_id ? ` → vault ${tx.vault_id}` : ""}`);
   return json({ ok: true });
 }
 
@@ -101,7 +114,6 @@ interface LipilaWebhookPayload {
 export async function handleLipilaWebhook(request: Request): Promise<Response> {
   const config = getServerConfig();
 
-  // Mandatory — reject if secret is not configured
   if (!config.lipilaWebhookSecret) {
     console.error("[lipila-webhook] LIPILA_WEBHOOK_SECRET not set — rejecting all requests");
     return json({ error: "Webhook secret not configured on server" }, 500);
@@ -111,7 +123,6 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
     request.headers.get("x-lipila-signature") ??
     request.headers.get("x-webhook-secret");
 
-  // Lipila uses plain-string comparison (not HMAC), matching existing implementation
   if (sig !== config.lipilaWebhookSecret) {
     console.warn("[lipila-webhook] Invalid signature — request rejected");
     return json({ error: "Invalid signature" }, 401);
@@ -132,8 +143,8 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
     return json({ error: "Missing transactionId" }, 400);
   }
 
-  const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; type: string }>(
-    `SELECT id, user_id, amount_sats, type FROM transactions
+  const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; type: string; vault_id: string | null }>(
+    `SELECT id, user_id, amount_sats, type, vault_id FROM transactions
      WHERE (metadata->>'lipilaTransactionId'=$1 OR metadata->>'externalId'=$2)
        AND status='pending' LIMIT 1`,
     [lipilaTransactionId ?? "", externalId ?? ""]
@@ -144,16 +155,30 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
   if (rawStatus === "SUCCESS" || rawStatus === "COMPLETED") {
     await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
     if (tx.type === "deposit") {
-      await creditWallet(tx.user_id, Number(tx.amount_sats));
-      await execute(
-        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-        [tx.user_id, `Added ${Number(tx.amount_sats).toLocaleString()} sats`, "Mobile Money deposit confirmed"]
-      );
-      await execute(
-        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
-        [tx.user_id, "Deposit confirmed",
-         `Your MoMo deposit of ${Number(tx.amount_sats).toLocaleString()} sats has been confirmed.`]
-      );
+      const amountSats = Number(tx.amount_sats);
+      if (tx.vault_id) {
+        await creditVault(tx.user_id, tx.vault_id, amountSats);
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
+          [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Mobile Money vault deposit confirmed"]
+        );
+        await execute(
+          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+          [tx.user_id, "Vault deposit confirmed",
+           `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been added to your vault.`]
+        );
+      } else {
+        await creditWallet(tx.user_id, amountSats);
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+          [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Mobile Money deposit confirmed"]
+        );
+        await execute(
+          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+          [tx.user_id, "Deposit confirmed",
+           `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been confirmed.`]
+        );
+      }
     }
   } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
     await execute(`UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`, [tx.id]);

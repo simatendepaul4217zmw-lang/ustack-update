@@ -4,8 +4,7 @@ import { ProgressRing } from "../ProgressRing";
 import type { Vault } from "@/lib/ustack-data";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 import { useCurrency } from "@/lib/currency-context";
-
-const accentMap = { coral: "oklch(0.73 0.19 55)", teal: "oklch(0.78 0.14 190)", mint: "oklch(0.86 0.13 160)", aqua: "oklch(0.78 0.14 190)", btc: "oklch(0.74 0.18 55)" } as const;
+import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
 
 export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }: {
   open: boolean; vault: Vault | null; onClose: () => void; onDeposit: () => void; onWithdraw: () => void;
@@ -16,6 +15,7 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
 
   if (!vault) return <Sheet open={open} onClose={onClose}><div /></Sheet>;
   const pct = vault.currentSats / vault.goalSats;
+  const accent = ACCENT_COLORS[vault.accent] ?? ACCENT_COLORS.btc;
   return (
     <Sheet open={open} onClose={onClose} title={vault.name}>
       <div className="relative rounded-3xl p-6 bg-card overflow-hidden shadow-soft border border-white/5">
@@ -31,7 +31,10 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
               {vault.type === "hodl" ? <Lock className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
               {vault.type === "hodl" ? "Hodl Vault" : "Stack Vault"}
             </div>
-            <div className="text-2xl font-semibold tabular-nums mt-1">{fmtValue(vault.currentSats, priceZmw)}</div>
+            <div className="flex items-center gap-2 mt-1">
+              <span style={{ color: accent }}><VaultIcon name={vault.emoji} className="w-4 h-4" /></span>
+              <div className="text-2xl font-semibold tabular-nums">{fmtValue(vault.currentSats, priceZmw)}</div>
+            </div>
             <div className="text-xs text-muted-foreground">{vault.currentSats.toLocaleString()} sats</div>
             <div className="text-[10px] text-muted-foreground/60 mt-0.5">of {fmtValue(vault.goalSats, priceZmw)} goal</div>
           </div>

@@ -9,14 +9,12 @@ import { Sheet } from "./Sheet";
 import { fmtSats, type Vault } from "@/lib/ustack-data";
 import { useCurrency } from "@/lib/currency-context";
 import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee, useBtcPrice } from "@/lib/hooks/useAppData";
+import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
 
 type Step = "source" | "vault" | "locked" | "amount" | "warning" | "done";
 type Source = "balance" | "vault";
 type Method = "lightning" | "momo" | "onchain";
 
-const accentColor: Record<string, string> = {
-  coral: "oklch(0.73 0.19 55)", teal: "oklch(0.78 0.14 190)", mint: "oklch(0.86 0.13 160)", aqua: "oklch(0.78 0.14 190)", btc: "oklch(0.74 0.18 55)",
-};
 const PROVIDERS = ["Airtel", "MTN MoMo", "Zamtel"];
 
 export function WithdrawSheet({
@@ -177,7 +175,7 @@ export function WithdrawSheet({
                 const p = v.currentSats / v.goalSats;
                 return (
                   <button key={v.id} onClick={() => selectVault(v)} className="flex items-center gap-3 rounded-2xl glass p-4 text-left transition active:scale-[0.98]">
-                    <div className="w-11 h-11 rounded-xl shrink-0 flex items-center justify-center text-xl" style={{ background: `${accentColor[v.accent]}20` }}>{v.emoji}</div>
+                    <div className="w-11 h-11 rounded-xl shrink-0 flex items-center justify-center" style={{ background: `${ACCENT_COLORS[v.accent] ?? ACCENT_COLORS.btc}20`, color: ACCENT_COLORS[v.accent] ?? ACCENT_COLORS.btc }}><VaultIcon name={v.emoji} className="w-5 h-5" /></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold truncate">{v.name}</span>
@@ -186,7 +184,7 @@ export function WithdrawSheet({
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5">{fmtSats(v.currentSats)} · {Math.round(p * 100)}% of goal</div>
                       <div className="mt-2 h-1 rounded-full bg-white/10 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${Math.min(p * 100, 100)}%`, background: accentColor[v.accent] }} />
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(p * 100, 100)}%`, background: ACCENT_COLORS[v.accent] ?? ACCENT_COLORS.btc }} />
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />

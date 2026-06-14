@@ -4,20 +4,14 @@ import type { Vault } from "@/lib/ustack-data";
 import { ProgressRing } from "./ProgressRing";
 import { useCurrency } from "@/lib/currency-context";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
-
-const accentMap = {
-  coral: "oklch(0.73 0.19 55)",
-  teal: "oklch(0.78 0.14 190)",
-  mint: "oklch(0.86 0.13 160)",
-  aqua: "oklch(0.78 0.14 190)",
-  btc: "oklch(0.74 0.18 55)",
-} as const;
+import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
 
 export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onClick?: () => void; large?: boolean }) {
   const { fmtValue } = useCurrency();
   const { data: btcPrice } = useBtcPrice();
   const priceZmw = btcPrice?.priceZmw;
   const pct = vault.currentSats / vault.goalSats;
+  const accent = ACCENT_COLORS[vault.accent] ?? ACCENT_COLORS.btc;
   return (
     <motion.button
       whileHover={{ y: -2 }}
@@ -25,7 +19,6 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
       onClick={onClick}
       className={`relative w-full text-left rounded-3xl p-4 glass-strong overflow-hidden shadow-soft ${large ? "h-44" : "h-48"}`}
     >
-
       <div className="relative flex justify-between items-start">
         <div>
           <div className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
@@ -39,8 +32,11 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
         </ProgressRing>
       </div>
 
-      <div className="relative mt-auto pt-6 flex items-end justify-between">
+      <div className="relative mt-auto pt-5 flex items-end justify-between">
         <div>
+          <div className="flex items-center gap-1.5 mb-1" style={{ color: accent }}>
+            <VaultIcon name={vault.emoji} className="w-3.5 h-3.5" />
+          </div>
           <div className="text-[10px] text-muted-foreground">Saved</div>
           <div className="text-sm font-semibold tabular-nums">{fmtValue(vault.currentSats, priceZmw)}</div>
           <div className="text-[10px] text-muted-foreground/60 tabular-nums">{(vault.currentSats / 1000).toFixed(0)}k sats</div>
@@ -56,7 +52,7 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
-        <motion.div initial={{ width: 0 }} animate={{ width: `${pct * 100}%` }} transition={{ duration: 1 }} className="h-full" style={{ background: accentMap[vault.accent] }} />
+        <motion.div initial={{ width: 0 }} animate={{ width: `${pct * 100}%` }} transition={{ duration: 1 }} className="h-full" style={{ background: accent }} />
       </div>
     </motion.button>
   );

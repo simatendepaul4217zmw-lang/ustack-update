@@ -85,7 +85,8 @@ export async function getBlinkBalance(): Promise<number> {
 export async function createLightningInvoice(
   userId: string,
   amountSats: number,
-  memo?: string
+  memo?: string,
+  vaultId?: string
 ): Promise<Invoice> {
   const config = getServerConfig();
 
@@ -94,9 +95,9 @@ export async function createLightningInvoice(
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
     await execute(
-      `INSERT INTO transactions(user_id, type, amount_sats, status, method, lightning_invoice, lightning_payment_hash)
-       VALUES($1,'deposit',$2,'pending','lightning',$3,$4)`,
-      [userId, amountSats, `lnbc_mock_${mockHash}`, mockHash]
+      `INSERT INTO transactions(user_id, type, amount_sats, status, method, lightning_invoice, lightning_payment_hash, vault_id)
+       VALUES($1,'deposit',$2,'pending','lightning',$3,$4,$5)`,
+      [userId, amountSats, `lnbc_mock_${mockHash}`, mockHash, vaultId ?? null]
     );
 
     return {
@@ -164,9 +165,9 @@ export async function createLightningInvoice(
   }
 
   await execute(
-    `INSERT INTO transactions(user_id, type, amount_sats, status, method, lightning_invoice, lightning_payment_hash)
-     VALUES($1,'deposit',$2,'pending','lightning',$3,$4)`,
-    [userId, amountSats, result.invoice.paymentRequest, result.invoice.paymentHash]
+    `INSERT INTO transactions(user_id, type, amount_sats, status, method, lightning_invoice, lightning_payment_hash, vault_id)
+     VALUES($1,'deposit',$2,'pending','lightning',$3,$4,$5)`,
+    [userId, amountSats, result.invoice.paymentRequest, result.invoice.paymentHash, vaultId ?? null]
   );
 
   return {

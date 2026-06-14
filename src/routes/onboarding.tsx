@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 import { Lock, TrendingUp, Shield } from "lucide-react";
 import { PhoneFrame } from "@/components/ustack/PhoneFrame";
+import { ACCENT_COLORS } from "@/lib/vault-theme";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({ meta: [{ title: "Get Started - UStack" }, { name: "description", content: "Learn how Hodl and Stack vaults work." }] }),
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/onboarding")({
 const slides = [
   {
     icon: Lock,
-    accent: "coral" as const,
+    accent: "rose" as const,
     title: "Hodl Vaults lock Bitcoin long-term.",
     sub: "Commit your sats. Stay focused. Let time do the work.",
     art: "vault",
@@ -26,7 +27,7 @@ const slides = [
   },
   {
     icon: Shield,
-    accent: "mint" as const,
+    accent: "purple" as const,
     title: "Early withdrawals include penalties.",
     sub: "A gentle nudge to keep you on track, not punishment.",
     art: "shield",
@@ -86,8 +87,8 @@ function Onboarding() {
   );
 }
 
-function IllustrationArt({ kind, accent }: { kind: string; accent: "coral" | "teal" | "mint" }) {
-  const color = accent === "coral" ? "oklch(0.73 0.19 55)" : accent === "teal" ? "oklch(0.78 0.14 190)" : "oklch(0.86 0.13 160)";
+function IllustrationArt({ kind, accent }: { kind: string; accent: string }) {
+  const color = ACCENT_COLORS[accent] ?? ACCENT_COLORS.btc;
   return (
     <div className="relative w-56 h-56">
       <div className="relative w-full h-full glass-strong rounded-[2.5rem] flex items-center justify-center">

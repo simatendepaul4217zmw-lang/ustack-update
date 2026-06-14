@@ -40,7 +40,7 @@ export function useCreateVault() {
       name: string;
       goalSats: number;
       vaultType: "stack" | "hodl";
-      accent?: "aqua" | "coral" | "teal" | "mint" | "btc";
+      accent?: "btc" | "purple" | "teal" | "blue" | "rose" | "gold";
       emoji?: string;
       goalFiat?: number;
       currency?: string;
@@ -125,7 +125,7 @@ export function useBtcPrice() {
 export function useCreateInvoice() {
   const { token } = useAuth();
   return useMutation({
-    mutationFn: (vars: { amountSats: number; memo?: string }) =>
+    mutationFn: (vars: { amountSats: number; memo?: string; vaultId?: string }) =>
       createInvoice({ data: { ...vars, token: token! } }),
   });
 }
@@ -171,11 +171,12 @@ export function useMobileMoneyDeposit() {
   const { token } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { phone: string; amountSats: number; provider: "airtel" | "mtn" | "zamtel" }) =>
+    mutationFn: (vars: { phone: string; amountSats: number; provider: "airtel" | "mtn" | "zamtel"; vaultId?: string }) =>
       mobileMoneySend({ data: { ...vars, token: token! } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["wallet"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
+      qc.invalidateQueries({ queryKey: ["vaults"] });
     },
   });
 }

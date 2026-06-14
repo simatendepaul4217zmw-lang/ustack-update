@@ -11,7 +11,7 @@ export interface Vault {
   daysRemaining: number;
   streakDays: number;
   locked: boolean;
-  accent: "coral" | "teal" | "mint" | "aqua" | "btc";
+  accent: "btc" | "purple" | "teal" | "blue" | "rose" | "gold";
   emoji: string;
   // server-side extended fields
   lockedUntil?: string | null;
@@ -44,11 +44,11 @@ export const monthlyStackedSats = 412_000;
 export const monthlyGoalSats = 600_000;
 
 export const vaults: Vault[] = [
-  { id: "v1", name: "Tuition Vault", type: "hodl", goalSats: 2_000_000, currentSats: 1_240_000, goalFiat: 12000, currency: "ZMW", daysRemaining: 184, streakDays: 21, locked: true, accent: "coral", emoji: "🎓" },
-  { id: "v2", name: "Laptop Fund", type: "stack", goalSats: 1_500_000, currentSats: 980_000, goalFiat: 8500, currency: "ZMW", daysRemaining: 92, streakDays: 7, locked: false, accent: "teal", emoji: "💻" },
-  { id: "v3", name: "Emergency Savings", type: "hodl", goalSats: 3_000_000, currentSats: 1_820_000, goalFiat: 18000, currency: "ZMW", daysRemaining: 365, streakDays: 41, locked: true, accent: "mint", emoji: "🛡️" },
-  { id: "v4", name: "Future Business", type: "stack", goalSats: 5_000_000, currentSats: 612_000, goalFiat: 32000, currency: "ZMW", daysRemaining: 540, streakDays: 12, locked: false, accent: "aqua", emoji: "🚀" },
-  { id: "v5", name: "Travel Goal", type: "stack", goalSats: 800_000, currentSats: 160_000, goalFiat: 5000, currency: "ZMW", daysRemaining: 120, streakDays: 4, locked: false, accent: "btc", emoji: "✈️" },
+  { id: "v1", name: "Tuition Vault", type: "hodl", goalSats: 2_000_000, currentSats: 1_240_000, goalFiat: 12000, currency: "ZMW", daysRemaining: 184, streakDays: 21, locked: true, accent: "rose", emoji: "GraduationCap" },
+  { id: "v2", name: "Laptop Fund", type: "stack", goalSats: 1_500_000, currentSats: 980_000, goalFiat: 8500, currency: "ZMW", daysRemaining: 92, streakDays: 7, locked: false, accent: "teal", emoji: "Laptop" },
+  { id: "v3", name: "Emergency Savings", type: "hodl", goalSats: 3_000_000, currentSats: 1_820_000, goalFiat: 18000, currency: "ZMW", daysRemaining: 365, streakDays: 41, locked: true, accent: "blue", emoji: "ShieldCheck" },
+  { id: "v4", name: "Future Business", type: "stack", goalSats: 5_000_000, currentSats: 612_000, goalFiat: 32000, currency: "ZMW", daysRemaining: 540, streakDays: 12, locked: false, accent: "purple", emoji: "Rocket" },
+  { id: "v5", name: "Travel Goal", type: "stack", goalSats: 800_000, currentSats: 160_000, goalFiat: 5000, currency: "ZMW", daysRemaining: 120, streakDays: 4, locked: false, accent: "gold", emoji: "Plane" },
 ];
 
 export const activity: Activity[] = [

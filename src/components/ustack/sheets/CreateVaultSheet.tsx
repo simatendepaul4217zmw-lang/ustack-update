@@ -4,41 +4,35 @@ import { Lock, TrendingUp, ChevronRight, ChevronLeft, ShieldCheck, Sparkles, Clo
 import { Sheet } from "./Sheet";
 import { useCreateVault } from "@/lib/hooks/useAppData";
 import type { Vault } from "@/lib/ustack-data";
+import { ACCENT_COLORS, VAULT_ACCENTS, VAULT_ICONS, VaultIcon } from "@/lib/vault-theme";
 
-const LOCK_OPTIONS = [
-  { months: 1, label: "1 month" },
-  { months: 3, label: "3 months" },
-  { months: 6, label: "6 months" },
-  { months: 12, label: "1 year" },
-  { months: 24, label: "2 years" },
-];
-
-const EMOJIS = ["💰", "🎓", "💻", "🛡️", "🚀", "✈️", "🏠", "💍", "🏥", "🌍"];
-const ACCENTS = [
-  { value: "btc" as const, label: "Bitcoin", color: "oklch(0.74 0.18 55)" },
-  { value: "teal" as const, label: "Teal", color: "oklch(0.78 0.14 190)" },
-  { value: "mint" as const, label: "Mint", color: "oklch(0.86 0.13 160)" },
-  { value: "coral" as const, label: "Coral", color: "oklch(0.73 0.19 55)" },
-  { value: "aqua" as const, label: "Aqua", color: "oklch(0.78 0.14 190)" },
+const PRESET_LOCK_OPTIONS = [
+  { months: 3,  label: "3 months",  days: 90  },
+  { months: 6,  label: "6 months",  days: 180 },
+  { months: 12, label: "1 year",    days: 365 },
+  { months: 24, label: "2 years",   days: 730 },
 ];
 
 export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; onClose: () => void; onDeposit: (vault: Vault) => void }) {
   const [step, setStep] = useState(0);
   const [type, setType] = useState<"hodl" | "stack">("stack");
   const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("💰");
-  const [accent, setAccent] = useState<"btc" | "teal" | "mint" | "coral" | "aqua">("btc");
+  const [icon, setIcon] = useState("Target");
+  const [accent, setAccent] = useState("btc");
   const [goal, setGoal] = useState(1_000_000);
   const [lockMonths, setLockMonths] = useState(6);
+  const [customMonths, setCustomMonths] = useState("");
+  const [useCustom, setUseCustom] = useState(false);
   const [error, setError] = useState("");
 
   const { mutateAsync: createVault, isPending } = useCreateVault();
 
   const total = 5;
+  const effectiveLockMonths = useCustom ? (parseInt(customMonths) || 1) : lockMonths;
 
   const close = () => {
     setStep(0); setName(""); setGoal(1_000_000); setLockMonths(6);
-    setEmoji("💰"); setAccent("btc"); setError("");
+    setIcon("Target"); setAccent("btc"); setError(""); setUseCustom(false); setCustomMonths("");
     onClose();
   };
 
@@ -54,11 +48,11 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
       const newVault = await createVault({
         name: name.trim() || "My Vault",
         vaultType: type,
-        emoji,
+        emoji: icon,
         accent,
         goalSats: goal,
         currency: "ZMW",
-        lockMonths: type === "hodl" ? lockMonths : 0,
+        lockMonths: type === "hodl" ? effectiveLockMonths : 0,
       });
       close();
       setTimeout(() => onDeposit(newVault), 400);
@@ -69,7 +63,6 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
 
   return (
     <Sheet open={open} onClose={close} title="Create Vault">
-      {/* progress */}
       <div className="flex gap-1.5 mb-6">
         {Array.from({ length: total }).map((_, i) => (
           <div key={i} className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
@@ -90,13 +83,13 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
               <div className="text-xl font-semibold">Choose vault type</div>
               <div className="text-sm text-muted-foreground mt-1 mb-5">Pick how you want to save.</div>
               <div className="flex flex-col gap-3">
-                <TypeCard active={type === "hodl"} onClick={() => setType("hodl")} icon={Lock} iconColor="oklch(0.73 0.19 55)" title="Hodl Vault" sub="Lock sats for a set time period, e.g. 6 months. Funds are frozen until the lock expires." />
-                <TypeCard active={type === "stack"} onClick={() => setType("stack")} icon={TrendingUp} iconColor="oklch(0.78 0.14 190)" title="Stack Vault" sub="Stack until you hit a target amount, e.g. 1,000,000 sats. Transfer anytime with a small penalty." />
+                <TypeCard active={type === "hodl"} onClick={() => setType("hodl")} icon={Lock} iconColor={ACCENT_COLORS.rose} title="Hodl Vault" sub="Lock sats for a set time period, e.g. 6 months. Funds are frozen until the lock expires." />
+                <TypeCard active={type === "stack"} onClick={() => setType("stack")} icon={TrendingUp} iconColor={ACCENT_COLORS.teal} title="Stack Vault" sub="Stack until you hit a target amount, e.g. 1,000,000 sats. Transfer anytime with a small penalty." />
               </div>
             </div>
           )}
 
-          {/* Step 1 — Name + emoji + accent */}
+          {/* Step 1 — Name + icon + accent */}
           {step === 1 && (
             <div>
               <div className="text-xl font-semibold">Name your vault</div>
@@ -112,21 +105,34 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
                   <button key={s} onClick={() => setName(s)} className="px-3 py-1.5 rounded-full glass text-xs">{s}</button>
                 ))}
               </div>
-              {/* Emoji picker */}
+
               <div className="mt-5">
                 <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Icon</div>
                 <div className="flex gap-2 flex-wrap">
-                  {EMOJIS.map((e) => (
-                    <button key={e} onClick={() => setEmoji(e)} className={`w-10 h-10 rounded-xl text-xl flex items-center justify-center transition ${emoji === e ? "bg-primary/20 ring-1 ring-primary" : "glass"}`}>{e}</button>
+                  {VAULT_ICONS.map((name) => (
+                    <button
+                      key={name}
+                      onClick={() => setIcon(name)}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center transition ${icon === name ? "ring-1 ring-primary" : "glass"}`}
+                      style={icon === name ? { background: `${ACCENT_COLORS[accent]}20`, color: ACCENT_COLORS[accent] } : { color: "oklch(0.6 0 0)" }}
+                    >
+                      <VaultIcon name={name} className="w-5 h-5" />
+                    </button>
                   ))}
                 </div>
               </div>
-              {/* Accent picker */}
+
               <div className="mt-4">
                 <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Color</div>
                 <div className="flex gap-2">
-                  {ACCENTS.map((a) => (
-                    <button key={a.value} onClick={() => setAccent(a.value)} className={`w-8 h-8 rounded-full transition ${accent === a.value ? "ring-2 ring-white ring-offset-2 ring-offset-background" : ""}`} style={{ background: a.color }} />
+                  {VAULT_ACCENTS.map((a) => (
+                    <button
+                      key={a.value}
+                      onClick={() => setAccent(a.value)}
+                      className={`w-8 h-8 rounded-full transition ${accent === a.value ? "ring-2 ring-white ring-offset-2 ring-offset-background" : ""}`}
+                      style={{ background: ACCENT_COLORS[a.value] }}
+                      title={a.label}
+                    />
                   ))}
                 </div>
               </div>
@@ -144,7 +150,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
                 <div className="text-3xl font-semibold mt-1 tabular-nums">{goal.toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground">sats</div>
               </div>
-              <input type="range" min={50_000} max={5_000_000} step={50_000} value={goal} onChange={(e) => setGoal(parseInt(e.target.value))} className="mt-5 w-full accent-[oklch(0.73_0.19_55)]" />
+              <input type="range" min={50_000} max={5_000_000} step={50_000} value={goal} onChange={(e) => setGoal(parseInt(e.target.value))} className="mt-5 w-full" style={{ accentColor: ACCENT_COLORS[accent] }} />
               <div className="mt-3 flex gap-2">
                 {[100_000, 500_000, 1_000_000, 2_500_000].map((v) => (
                   <button key={v} onClick={() => setGoal(v)} className="flex-1 py-2 rounded-xl glass text-xs">{(v / 1000)}k</button>
@@ -159,18 +165,51 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
               <div className="text-xl font-semibold">Set lock duration</div>
               <div className="text-sm text-muted-foreground mt-1 mb-5">Your sats will be frozen for this period.</div>
               <div className="flex flex-col gap-2">
-                {LOCK_OPTIONS.map((opt) => (
-                  <button key={opt.months} onClick={() => setLockMonths(opt.months)} className={`flex items-center gap-4 rounded-2xl p-4 text-left border transition ${lockMonths === opt.months ? "bg-card border-primary/50" : "bg-card/50 border-transparent glass"}`}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={lockMonths === opt.months ? { background: "oklch(0.73 0.19 55)", color: "white" } : { background: "oklch(1 0 0 / 0.05)" }}>
-                      <Clock className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold">{opt.label}</div>
-                      <div className="text-xs text-muted-foreground">{opt.months * 30} days locked</div>
-                    </div>
-                    <div className={`w-5 h-5 rounded-full border-2 ${lockMonths === opt.months ? "border-primary bg-primary" : "border-muted"}`} />
-                  </button>
-                ))}
+                {PRESET_LOCK_OPTIONS.map((opt) => {
+                  const selected = !useCustom && lockMonths === opt.months;
+                  return (
+                    <button key={opt.months} onClick={() => { setLockMonths(opt.months); setUseCustom(false); }} className={`flex items-center gap-4 rounded-2xl p-4 text-left border transition ${selected ? "bg-card border-primary/50" : "bg-card/50 border-transparent glass"}`}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={selected ? { background: ACCENT_COLORS[accent], color: "white" } : { background: "oklch(1 0 0 / 0.05)" }}>
+                        <Clock className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold">{opt.label}</div>
+                        <div className="text-xs text-muted-foreground">{opt.days} days locked</div>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 ${selected ? "border-primary bg-primary" : "border-muted"}`} />
+                    </button>
+                  );
+                })}
+
+                {/* Custom option */}
+                <button onClick={() => setUseCustom(true)} className={`flex items-center gap-4 rounded-2xl p-4 text-left border transition ${useCustom ? "bg-card border-primary/50" : "bg-card/50 border-transparent glass"}`}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={useCustom ? { background: ACCENT_COLORS[accent], color: "white" } : { background: "oklch(1 0 0 / 0.05)" }}>
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    {useCustom ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          autoFocus
+                          type="number"
+                          min={1}
+                          value={customMonths}
+                          onChange={(e) => setCustomMonths(e.target.value.replace(/\D/g, ""))}
+                          onClick={(e) => e.stopPropagation()}
+                          placeholder="e.g. 18"
+                          className="w-20 bg-transparent border-b border-primary text-sm font-semibold focus:outline-none tabular-nums"
+                        />
+                        <span className="text-sm text-muted-foreground">months</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-sm font-semibold">Custom</div>
+                        <div className="text-xs text-muted-foreground">Enter any number of months</div>
+                      </>
+                    )}
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border-2 ${useCustom ? "border-primary bg-primary" : "border-muted"}`} />
+                </button>
               </div>
             </div>
           )}
@@ -194,7 +233,9 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
               <div className="text-sm text-muted-foreground mt-1">Review and create.</div>
               <div className="mt-5 rounded-2xl glass p-5 flex flex-col gap-3">
                 <div className="flex items-center gap-3 pb-3 border-b border-white/8">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl">{emoji}</div>
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: `${ACCENT_COLORS[accent]}20`, color: ACCENT_COLORS[accent] }}>
+                    <VaultIcon name={icon} className="w-6 h-6" />
+                  </div>
                   <div>
                     <div className="font-semibold">{name || "Untitled"}</div>
                     <div className="text-xs text-muted-foreground">{type === "hodl" ? "Hodl Vault" : "Stack Vault"}</div>
@@ -202,14 +243,16 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
                 </div>
                 <Summary k="Target" v={`${goal.toLocaleString()} sats`} />
                 {type === "hodl"
-                  ? <Summary k="Lock duration" v={LOCK_OPTIONS.find(o => o.months === lockMonths)?.label ?? `${lockMonths}mo`} />
+                  ? <Summary k="Lock duration" v={useCustom ? `${effectiveLockMonths} months` : PRESET_LOCK_OPTIONS.find(o => o.months === lockMonths)?.label ?? `${lockMonths}mo`} />
                   : <Summary k="Transfers" v="Flexible (10% early penalty)" />
                 }
               </div>
               <div className="mt-4 rounded-xl bg-white/5 px-4 py-3 flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-[oklch(0.78_0.14_190)] mt-0.5 shrink-0" />
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  {type === "hodl" ? `Your sats will be fully locked for ${LOCK_OPTIONS.find(o => o.months === lockMonths)?.label}. This is intentional. It keeps your future self protected.` : "You can withdraw at any time. The 10% penalty is there to keep you disciplined, not to punish you."}
+                  {type === "hodl"
+                    ? `Your sats will be fully locked for ${useCustom ? `${effectiveLockMonths} months` : PRESET_LOCK_OPTIONS.find(o => o.months === lockMonths)?.label}. This is intentional. It keeps your future self protected.`
+                    : "You can withdraw at any time. The 10% penalty is there to keep you disciplined, not to punish you."}
                 </p>
               </div>
               {error && <p className="mt-3 text-sm text-destructive">{error}</p>}

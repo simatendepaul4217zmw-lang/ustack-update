@@ -1,1 +1,2 @@
 - [pg client-side shim](pg-client-shim.md) — TanStack Start + Vite doesn't tree-shake Node.js deps (pg, jose) from client bundles; requires a custom Vite plugin to stub them.
+- [vault-theme tsx naming](vault-theme-tsx.md) — vault-theme must be .tsx (not .ts) because it exports a JSX VaultIcon component; Vite/esbuild rejects JSX in .ts files.

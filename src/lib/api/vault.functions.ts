@@ -10,7 +10,7 @@ export interface Vault {
   name: string;
   vault_type: "stack" | "hodl";
   emoji: string;
-  accent: "coral" | "teal" | "mint" | "aqua" | "btc";
+  accent: "btc" | "purple" | "teal" | "blue" | "rose" | "gold";
   goal_sats: number;
   current_sats: number;
   goal_fiat: number;
@@ -56,7 +56,7 @@ export const createVault = createServerFn({ method: "POST" })
     name: z.string().min(1).max(50),
     vaultType: z.enum(["stack", "hodl"]),
     emoji: z.string().default("💰"),
-    accent: z.enum(["coral", "teal", "mint", "aqua", "btc"]).default("btc"),
+    accent: z.enum(["btc", "purple", "teal", "blue", "rose", "gold"]).default("btc"),
     goalSats: z.number().int().positive(),
     goalFiat: z.number().optional(),
     currency: z.string().default("ZMW"),
@@ -199,7 +199,7 @@ function normalizeVault(v: Vault) {
     name: v.name,
     type: v.vault_type as "stack" | "hodl",
     emoji: v.emoji,
-    accent: v.accent as "coral" | "teal" | "mint" | "aqua" | "btc",
+    accent: v.accent as "btc" | "purple" | "teal" | "blue" | "rose" | "gold",
     goalSats: Number(v.goal_sats),
     currentSats: Number(v.current_sats),
     goalFiat: Number(v.goal_fiat ?? 0),
