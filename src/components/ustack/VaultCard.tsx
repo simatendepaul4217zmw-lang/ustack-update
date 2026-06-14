@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
 import { Lock, TrendingUp } from "lucide-react";
 import type { Vault } from "@/lib/ustack-data";
-import { fmtZMW } from "@/lib/ustack-data";
 import { ProgressRing } from "./ProgressRing";
+import { useCurrency } from "@/lib/currency-context";
+import { useBtcPrice } from "@/lib/hooks/useAppData";
 
 const accentMap = {
   coral: "oklch(0.73 0.19 55)",
@@ -13,6 +14,9 @@ const accentMap = {
 } as const;
 
 export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onClick?: () => void; large?: boolean }) {
+  const { fmtValue } = useCurrency();
+  const { data: btcPrice } = useBtcPrice();
+  const priceZmw = btcPrice?.priceZmw;
   const pct = vault.currentSats / vault.goalSats;
   return (
     <motion.button
@@ -38,7 +42,7 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
       <div className="relative mt-auto pt-6 flex items-end justify-between">
         <div>
           <div className="text-[10px] text-muted-foreground">Saved</div>
-          <div className="text-sm font-semibold tabular-nums">{fmtZMW(vault.currentSats)}</div>
+          <div className="text-sm font-semibold tabular-nums">{fmtValue(vault.currentSats, priceZmw)}</div>
           <div className="text-[10px] text-muted-foreground/60 tabular-nums">{(vault.currentSats / 1000).toFixed(0)}k sats</div>
         </div>
         <div className="text-right">

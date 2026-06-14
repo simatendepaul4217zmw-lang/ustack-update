@@ -157,7 +157,7 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
               <div className="text-xs text-muted-foreground mb-2">Display currency</div>
               <div className="flex gap-2">
                 {["ZMW", "USD", "BTC"].map((c) => (
-                  <button key={c} onClick={() => handleCurrencyChange(c)} className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${currency === c ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}>
+                  <button key={c} onClick={() => handleCurrencyChange(c as import("@/lib/currency-context").Currency)} className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${currency === c ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}>
                     {c}
                   </button>
                 ))}

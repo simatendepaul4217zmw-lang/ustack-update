@@ -6,8 +6,9 @@ import {
   ClipboardPaste, X as XIcon, Loader2, Link2
 } from "lucide-react";
 import { Sheet } from "./Sheet";
-import { fmtSats, fmtZMW, type Vault } from "@/lib/ustack-data";
-import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee } from "@/lib/hooks/useAppData";
+import { fmtSats, type Vault } from "@/lib/ustack-data";
+import { useCurrency } from "@/lib/currency-context";
+import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee, useBtcPrice } from "@/lib/hooks/useAppData";
 
 type Step = "source" | "vault" | "locked" | "amount" | "warning" | "done";
 type Source = "balance" | "vault";
@@ -38,6 +39,9 @@ export function WithdrawSheet({
 
   const { data: wallet } = useWallet();
   const { data: vaults = [] } = useVaults();
+  const { data: btcPrice } = useBtcPrice();
+  const priceZmw = btcPrice?.priceZmw;
+  const { fmtValue } = useCurrency();
   const withdrawFromVault = useWithdrawFromVault();
   const sendPayment = useSendPayment();
   const sendOnChain = useSendOnChainPayment();
@@ -384,6 +388,9 @@ export function WithdrawSheet({
 }
 
 function AmountField({ amount, setAmount, maxAmount }: { amount: string; setAmount: (v: string) => void; maxAmount: number }) {
+  const { fmtValue } = useCurrency();
+  const { data: btcPriceAmt } = useBtcPrice();
+  const priceZmwAmt = btcPriceAmt?.priceZmw;
   return (
     <div>
       <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Amount</div>
@@ -391,7 +398,7 @@ function AmountField({ amount, setAmount, maxAmount }: { amount: string; setAmou
         <input inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} className="bg-transparent text-3xl font-semibold text-center tabular-nums focus:outline-none w-44" placeholder="0" />
         <span className="text-sm text-muted-foreground">sats</span>
       </div>
-      {Number(amount) > 0 && <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">{fmtZMW(Number(amount))}</div>}
+      {Number(amount) > 0 && <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">{fmtValue(Number(amount), priceZmwAmt)}</div>}
       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground px-1">
         <span>Available: <span className="text-foreground font-semibold">{fmtSats(maxAmount)}</span></span>
         <button onClick={() => setAmount(String(maxAmount))} className="text-[oklch(0.82_0.13_190)] font-semibold text-[10px] uppercase tracking-wider">Max</button>

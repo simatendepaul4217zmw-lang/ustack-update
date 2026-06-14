@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Sheet } from "./Sheet";
-import { fmtSats, fmtZMW, satsToZMW, BTC_PRICE_ZMW, type Vault } from "@/lib/ustack-data";
+import { fmtSats, satsToZMW, BTC_PRICE_ZMW, type Vault } from "@/lib/ustack-data";
+import { useCurrency } from "@/lib/currency-context";
 import { useVaults, useMobileMoneyDeposit, useDepositToVault, useCreateInvoice, useCheckInvoiceStatus } from "@/lib/hooks/useAppData";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 
@@ -56,6 +57,7 @@ export function DepositSheet({
   const { data: vaults = [] } = useVaults();
   const { data: priceData } = useBtcPrice();
   const priceZmw = priceData?.priceZmw ?? BTC_PRICE_ZMW;
+  const { fmtValue } = useCurrency();
 
   const momoDeposit = useMobileMoneyDeposit();
   const vaultDeposit = useDepositToVault();
@@ -290,7 +292,7 @@ export function DepositSheet({
                             <span className="text-sm text-muted-foreground">sats</span>
                           </div>
                           {Number(lnAmount) > 0 && (
-                            <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">{fmtZMW(Number(lnAmount))}</div>
+                            <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">{fmtValue(Number(lnAmount), priceZmw)}</div>
                           )}
                         </div>
                         <button disabled={!lnAmount || Number(lnAmount) <= 0 || createInvoice.isPending} onClick={handleGenerateInvoice} className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40">

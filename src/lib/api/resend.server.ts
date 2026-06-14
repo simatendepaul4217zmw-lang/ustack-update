@@ -15,7 +15,7 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
   const resend = getResend();
 
   const { error } = await resend.emails.send({
-    from: "UStack <onboarding@resend.dev>",
+    from: "UStack <onboarding@ustack.site>",
     to,
     subject: `${code} is your UStack code`,
     html: `

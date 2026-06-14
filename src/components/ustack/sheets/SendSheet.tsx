@@ -2,7 +2,8 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Zap, Smartphone, CheckCircle2, AlertCircle } from "lucide-react";
 import { Sheet } from "./Sheet";
-import { fmtSats, fmtZMW } from "@/lib/ustack-data";
+import { fmtSats } from "@/lib/ustack-data";
+import { useCurrency } from "@/lib/currency-context";
 import { useWallet, useSendPayment, useMobileMoneyPayout, useBtcPrice } from "@/lib/hooks/useAppData";
 
 type Step = "form" | "loading" | "done" | "error";
@@ -25,6 +26,7 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
 
   const { data: wallet } = useWallet();
   const { data: btcPrice } = useBtcPrice();
+  const { fmtValue } = useCurrency();
   const sendPaymentMut = useSendPayment();
   const momoPayoutMut = useMobileMoneyPayout();
 
@@ -142,7 +144,7 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
             {amtNum > 0 && (
               <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">
-                {fmtZMW(amtNum, priceZmw)}
+                {fmtValue(amtNum, priceZmw)}
               </div>
             )}
             <div className="mt-2 flex items-center justify-between px-1">

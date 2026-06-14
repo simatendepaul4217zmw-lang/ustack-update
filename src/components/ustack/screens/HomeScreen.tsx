@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 import { Zap, ArrowLeftRight, Eye, EyeOff, Flame, ShieldCheck, TrendingUp, TrendingDown, Loader2, ArrowDownToLine } from "lucide-react";
-import { tips, fmtSats, fmtBTC, fmtZMW, type Vault } from "@/lib/ustack-data";
+import { tips, fmtSats, fmtBTC, type Vault } from "@/lib/ustack-data";
 import { CountUp } from "../CountUp";
 import { ProgressRing } from "../ProgressRing";
 import { VaultCard } from "../VaultCard";

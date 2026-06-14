@@ -2,7 +2,6 @@ import { Lock, TrendingUp, Calendar, Flame, Zap, ArrowLeftRight, Trophy, Check }
 import { Sheet } from "./Sheet";
 import { ProgressRing } from "../ProgressRing";
 import type { Vault } from "@/lib/ustack-data";
-import { fmtZMW } from "@/lib/ustack-data";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 import { useCurrency } from "@/lib/currency-context";
 
