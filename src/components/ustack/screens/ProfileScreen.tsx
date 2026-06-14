@@ -62,9 +62,9 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
           </div>
 
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            UStack automatically shields every user's stack when Bitcoin drops by{" "}
+            UStack automatically shields every user's stacks  when Bitcoin drops by{" "}
             <span className="font-semibold" style={{ color: "oklch(0.82 0.13 190)" }}>2%</span>{" "}
-            or more. No setup required — it's built into the platform.
+            or more.
           </p>
 
           <div className="mt-4 grid grid-cols-3 gap-2">

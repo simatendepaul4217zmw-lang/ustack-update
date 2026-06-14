@@ -1,0 +1,222 @@
+Update UStack withdrawal logic to support Treasury Protection Mode.
+
+OVERVIEW
+
+UStack operates a pooled treasury using Blink.
+
+The treasury can exist in one of two states:
+
+* BTC Mode
+* USD Protection Mode
+
+Users must always be able to withdraw regardless of treasury mode.
+
+The system must NEVER disable withdrawals because treasury protection is active.
+
+WITHDRAWAL RULES
+
+IF treasury_mode = BTC
+
+Process withdrawals normally.
+
+Flow:
+
+User requests withdrawal
+↓
+Validate balance
+↓
+Create Lightning payment
+↓
+Send from Blink BTC wallet
+↓
+Update user balances
+↓
+Record transaction
+
+IF treasury_mode = USD
+
+Do NOT disable withdrawals.
+
+Do NOT move the entire treasury back into BTC.
+
+Instead:
+
+Convert only the amount required for the withdrawal.
+
+Flow:
+
+User requests withdrawal
+↓
+Determine withdrawal amount
+↓
+Calculate equivalent USD value
+↓
+Convert only required USD amount
+USD → BTC
+↓
+Pay Lightning invoice
+↓
+Update user balances
+↓
+Record transaction
+
+EXAMPLE
+
+Treasury State:
+
+USD Protection Mode
+
+Treasury:
+
+USD Wallet
+$1,000
+
+BTC Wallet
+0 sats
+
+User requests:
+
+20,000 sats withdrawal
+
+Current BTC price:
+
+$100,000
+
+20,000 sats = $20
+
+Process:
+
+Convert only $20 from USD treasury to BTC
+
+Pay Lightning invoice
+
+Treasury after withdrawal:
+
+USD Wallet
+$980
+
+BTC Wallet
+0 sats
+
+Protection remains active.
+
+The rest of the treasury stays protected.
+
+DEPOSITS DURING PROTECTION
+
+IF treasury_mode = USD
+
+When new deposits arrive:
+
+User deposits BTC
+↓
+Receive BTC
+↓
+Convert deposit amount to USD
+↓
+Add to USD treasury
+↓
+Credit user account
+
+This keeps treasury allocations consistent.
+
+USER BALANCES
+
+User balances continue to be stored in sats.
+
+Do not change existing wallet, vault, or transaction structures.
+
+The treasury mode should not change the user's ownership records.
+
+TRANSACTION RECORDS
+
+Add metadata fields:
+
+treasury_mode
+conversion_rate
+usd_value
+
+Example:
+
+{
+"treasury_mode": "usd",
+"conversion_rate": 100000,
+"usd_value": 20
+}
+
+LIGHTNING WITHDRAWALS
+
+Support withdrawals while treasury is in either mode.
+
+BTC Mode:
+
+BTC Wallet → Lightning Payment
+
+USD Mode:
+
+USD Wallet
+↓
+Convert required amount
+↓
+BTC Wallet
+↓
+Lightning Payment
+
+TREASURY SAFETY
+
+Never convert the entire treasury for a single withdrawal.
+
+Only convert the exact amount needed.
+
+Multiple withdrawals should not disable protection mode.
+
+Protection mode remains active until the protection engine decides to re-enter BTC.
+
+API UPDATES
+
+Update withdrawal endpoints to:
+
+1. Check treasury mode.
+2. Calculate conversion requirements.
+3. Convert only required funds when treasury mode is USD.
+4. Process Lightning payment.
+5. Update balances and transaction history.
+
+LOGGING
+
+Record:
+
+Withdrawal Requested
+
+USD Conversion Executed
+
+Lightning Payment Sent
+
+Withdrawal Completed
+
+Store:
+
+Blink transaction IDs
+
+Conversion rates
+
+Treasury mode at time of withdrawal
+
+TECHNICAL REQUIREMENTS
+
+Use TypeScript.
+
+Integrate with existing:
+
+* wallets
+* vaults
+* transactions
+* treasury_state
+
+Create reusable services:
+
+* WithdrawalService
+* TreasuryConversionService
+* BlinkPaymentService
+
+Ensure withdrawals function identically from the user's perspective regardless of treasury mode.

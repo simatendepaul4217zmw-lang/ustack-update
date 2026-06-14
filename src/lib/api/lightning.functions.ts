@@ -6,6 +6,7 @@ import { execute, queryOne } from "../db/index.server";
 import { creditWallet } from "./wallet.functions";
 import { requestPayment, disburseFunds, getLipilaStatus } from "./lipila.server";
 import { getServerConfig } from "../config.server";
+import { prepareWithdrawal, buildWithdrawalMeta } from "./withdrawal.service";
 
 // Helper: convert sats to ZMW using latest stored price
 async function satsToZmw(amountSats: number): Promise<number> {
@@ -76,25 +77,24 @@ export const sendPayment = createServerFn({ method: "POST" })
     );
 
     try {
-      let result: { success: boolean; status: "SUCCESS" | "PENDING" };
+      // Treasury mode check — converts USD→BTC first if treasury is protected
+      const prep = await prepareWithdrawal(payload.sub, data.amountSats);
 
+      let result: { success: boolean; status: "SUCCESS" | "PENDING" };
       if (isLnAddress) {
         result = await payLightningAddress(payload.sub, destination, data.amountSats);
       } else {
         result = await payLightningInvoice(payload.sub, destination, data.amountSats);
       }
 
-      // Record activity log
+      const statusLabel = result.status === "PENDING" ? "Lightning · pending confirmation" : "Lightning · confirmed";
+      const meta = buildWithdrawalMeta({ channel: "lightning", destination }, prep);
+
       await execute(
         `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
-        [
-          payload.sub,
-          `Sent ${data.amountSats.toLocaleString()} sats`,
-          result.status === "PENDING" ? "Lightning · pending confirmation" : "Lightning · confirmed",
-        ]
+        [payload.sub, `Sent ${data.amountSats.toLocaleString()} sats`, statusLabel]
       );
 
-      // Record notification
       await execute(
         `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
         [
@@ -104,9 +104,16 @@ export const sendPayment = createServerFn({ method: "POST" })
         ]
       );
 
-      return result;
+      // Update transaction record with treasury metadata
+      await execute(
+        `UPDATE transactions SET meta=COALESCE(meta,'{}')::jsonb || $1::jsonb
+         WHERE user_id=$2 AND type='withdraw' AND status IN ('pending','confirmed')
+         ORDER BY created_at DESC LIMIT 1`,
+        [meta, payload.sub]
+      );
+
+      return { ...result, treasuryMode: prep.treasuryMode };
     } catch (err) {
-      // Refund balance on failure
       await execute(
         `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
         [data.amountSats, payload.sub]
@@ -151,15 +158,17 @@ export const sendOnChainPayment = createServerFn({ method: "POST" })
     );
 
     try {
+      // Treasury mode check — converts USD→BTC first if treasury is protected
+      const prep = await prepareWithdrawal(payload.sub, data.amountSats);
+
       const result = await payOnChain(payload.sub, data.address, data.amountSats);
+
+      const statusLabel = result.status === "PENDING" ? "On-chain · confirming (~10 min)" : "On-chain · confirmed";
+      const meta = buildWithdrawalMeta({ channel: "onchain", address: data.address }, prep);
 
       await execute(
         `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
-        [
-          payload.sub,
-          `Sent ${data.amountSats.toLocaleString()} sats`,
-          result.status === "PENDING" ? "On-chain · confirming (~10 min)" : "On-chain · confirmed",
-        ]
+        [payload.sub, `Sent ${data.amountSats.toLocaleString()} sats`, statusLabel]
       );
 
       await execute(
@@ -171,7 +180,14 @@ export const sendOnChainPayment = createServerFn({ method: "POST" })
         ]
       );
 
-      return result;
+      await execute(
+        `UPDATE transactions SET meta=COALESCE(meta,'{}')::jsonb || $1::jsonb
+         WHERE user_id=$2 AND type='withdraw' AND meta->>'channel'='onchain'
+         ORDER BY created_at DESC LIMIT 1`,
+        [meta, payload.sub]
+      );
+
+      return { ...result, treasuryMode: prep.treasuryMode };
     } catch (err) {
       await execute(
         `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
@@ -276,12 +292,20 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
 
     const config = getServerConfig();
 
+    // Capture treasury mode for metadata (MoMo goes via Lipila/ZMW — no Blink BTC needed)
+    const { getTreasuryState } = await import("./treasury.server");
+    const treasuryState = await getTreasuryState().catch(() => null);
+    const treasuryMode = treasuryState?.current_mode ?? "btc";
+
     if (config.mockLipila) {
       // Mock: instant confirmation
       await execute(
         `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata)
          VALUES($1,'send',$2,'confirmed','mobile_money',$3)`,
-        [payload.sub, data.amountSats, JSON.stringify({ provider: data.provider, phone: data.phone, mock: true })]
+        [payload.sub, data.amountSats, JSON.stringify({
+          provider: data.provider, phone: data.phone, mock: true,
+          treasury_mode: treasuryMode,
+        })]
       );
       await execute(
         `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
@@ -315,6 +339,7 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
           amountZmw,
           lipilaTransactionId: result.transactionId,
           externalId,
+          treasury_mode: treasuryMode,
         })]
       );
       await execute(

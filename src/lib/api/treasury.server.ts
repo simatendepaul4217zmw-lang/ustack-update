@@ -188,6 +188,54 @@ export async function getTreasuryState(): Promise<TreasuryState | null> {
   return queryOne<TreasuryState>(`SELECT * FROM treasury_state ORDER BY id LIMIT 1`);
 }
 
+// Convert a specific USD cent amount from USD wallet → BTC wallet (partial swap for withdrawals)
+export async function convertPartialUsdToBtc(usdCents: number): Promise<string> {
+  const config = getServerConfig();
+
+  if (config.mockBlink) {
+    console.log(`[treasury] MOCK: convertPartialUsdToBtc ${usdCents} cents`);
+    return "mock-partial-tx";
+  }
+
+  const [btcWalletId, usdWalletId] = await Promise.all([getBtcWalletId(), getUsdWalletId()]);
+
+  const res = await fetch(config.blinkApiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-KEY": config.blinkApiKey! },
+    body: JSON.stringify({
+      query: `mutation IntraLedgerUsdPaymentSend($input: IntraLedgerUsdPaymentSendInput!) {
+        intraLedgerUsdPaymentSend(input: $input) {
+          status
+          errors { message }
+        }
+      }`,
+      variables: {
+        input: {
+          walletId: usdWalletId,
+          recipientWalletId: btcWalletId,
+          amount: usdCents,
+          memo: `UStack withdrawal conversion: $${(usdCents / 100).toFixed(2)} USD → BTC`,
+        },
+      },
+    }),
+  });
+
+  const json = await res.json() as {
+    data?: { intraLedgerUsdPaymentSend?: { status: string; errors?: { message: string }[] } };
+    errors?: { message: string }[];
+  };
+
+  console.log("[treasury] convertPartialUsdToBtc response:", JSON.stringify(json));
+
+  const result = json.data?.intraLedgerUsdPaymentSend;
+  if (!result || result.status === "FAILURE") {
+    const msg = result?.errors?.[0]?.message ?? json.errors?.[0]?.message ?? "USD→BTC partial conversion failed";
+    throw new Error(msg);
+  }
+
+  return `usd-to-btc-${Date.now()}`;
+}
+
 export async function initTreasuryState(currentPriceUsd: number): Promise<TreasuryState> {
   const existing = await getTreasuryState();
   if (existing) return existing;
