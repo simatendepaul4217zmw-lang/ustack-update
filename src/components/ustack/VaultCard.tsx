@@ -19,10 +19,17 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
     ? (vault.lockProgressPct ?? 0)
     : satsPct;
 
+  // Show <1% instead of 0% when there's real but tiny progress
+  const fmtPct = (p: number) => {
+    if (p <= 0) return "0%";
+    const r = Math.round(p * 100);
+    return r === 0 ? "<1%" : `${r}%`;
+  };
+
   // Ring centre label
   const ringLabel = vault.type === "hodl"
     ? `${vault.daysRemaining}d`
-    : `${Math.round(satsPct * 100)}%`;
+    : fmtPct(satsPct);
 
   // Bottom-right stat
   const statLabel = vault.type === "hodl"

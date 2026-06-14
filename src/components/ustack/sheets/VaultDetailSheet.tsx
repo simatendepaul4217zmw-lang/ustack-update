@@ -18,6 +18,12 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
   const accent = ACCENT_COLORS[vault.accent] ?? ACCENT_COLORS.btc;
   const satsPct = vault.goalSats > 0 ? vault.currentSats / vault.goalSats : 0;
 
+  const fmtPct = (p: number) => {
+    if (p <= 0) return "0%";
+    const r = Math.round(p * 100);
+    return r === 0 ? "<1%" : `${r}%`;
+  };
+
   // Hodl → ring tracks time through lock; Stack → ring tracks sats toward goal
   const ringPct = vault.type === "hodl"
     ? (vault.lockProgressPct ?? 0)
@@ -55,11 +61,11 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
                 <>
                   <div className="text-lg font-semibold tabular-nums leading-none">{vault.daysRemaining}</div>
                   <div className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">days left</div>
-                  <div className="text-[9px] text-muted-foreground/60 mt-0.5">{Math.round(ringPct * 100)}% done</div>
+                  <div className="text-[9px] text-muted-foreground/60 mt-0.5">{fmtPct(ringPct)} done</div>
                 </>
               ) : (
                 <>
-                  <div className="text-2xl font-semibold tabular-nums leading-none">{Math.round(satsPct * 100)}%</div>
+                  <div className="text-2xl font-semibold tabular-nums leading-none">{fmtPct(satsPct)}</div>
                   <div className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">of goal</div>
                 </>
               )}
@@ -86,7 +92,7 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
         <div className="mt-5">
           <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5">
             <span>{vault.type === "hodl" ? "Sats deposited" : "Progress to goal"}</span>
-            <span>{Math.round(satsPct * 100)}%</span>
+            <span>{fmtPct(satsPct)}</span>
           </div>
           <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
             <div
@@ -111,12 +117,12 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
           <>
             <Tile icon={Clock}   label="Days left"   value={`${vault.daysRemaining}d`} />
             <Tile icon={Flame}   label="Streak"      value={`${vault.streakDays}d`} />
-            <Tile icon={Trophy}  label="Time done"   value={`${Math.round(ringPct * 100)}%`} />
+            <Tile icon={Trophy}  label="Time done"   value={fmtPct(ringPct)} />
           </>
         ) : (
           <>
             <Tile icon={Flame}   label="Streak"      value={`${vault.streakDays}d`} />
-            <Tile icon={Target}  label="Goal"        value={`${Math.round(satsPct * 100)}%`} />
+            <Tile icon={Target}  label="Goal"        value={fmtPct(satsPct)} />
             <Tile icon={Calendar} label="Days active" value={`${vault.daysSinceCreated ?? 0}d`} />
           </>
         )}
