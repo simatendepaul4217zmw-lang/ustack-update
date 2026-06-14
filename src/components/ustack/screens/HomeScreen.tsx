@@ -30,8 +30,8 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
   const { fmtValue } = useCurrency();
 
   const totalSats = wallet?.totalSats ?? 0;
-  const lockedSats = wallet?.vaultSats ?? 0;
-  const availableSats = wallet?.availableSats ?? 0;
+  const lockedSats = wallet?.lockedVaultSats ?? 0;
+  const availableSats = (wallet?.availableSats ?? 0) + (wallet?.openVaultSats ?? 0);
 
   const monthlyStacked = vaults.reduce((sum, v) => sum + v.currentSats, 0);
   const monthlyGoal = vaults.reduce((sum, v) => sum + v.goalSats, 0) || 1;
@@ -74,7 +74,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
         )}
 
         <div className="relative mt-5 grid grid-cols-2 gap-3">
-          <Stat label="In Vaults" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtValue(lockedSats, priceZmw)} accent="rose" />
+          <Stat label="Locked" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtValue(lockedSats, priceZmw)} accent="rose" />
           <Stat label="Available" value={hidden ? "•••" : fmtSats(availableSats)} zmw={hidden ? undefined : fmtValue(availableSats, priceZmw)} accent="teal" />
         </div>
 
