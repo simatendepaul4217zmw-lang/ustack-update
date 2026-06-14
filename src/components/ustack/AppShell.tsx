@@ -18,8 +18,10 @@ import { SettingsSheet } from "./sheets/SettingsSheet";
 import { HelpSheet } from "./sheets/HelpSheet";
 import { EditProfileSheet } from "./sheets/EditProfileSheet";
 import { useAuth } from "@/lib/context/auth-context";
-import { usePriceProtection, useBtcPrice } from "@/lib/hooks/useAppData";
+import { useBtcPrice } from "@/lib/hooks/useAppData";
 import type { Vault } from "@/lib/ustack-data";
+
+const PRICE_PROTECTION_THRESHOLD_PCT = 2;
 
 export type SheetKind =
   | null
@@ -42,7 +44,6 @@ export function AppShell() {
   const [depositVault, setDepositVault] = useState<Vault | null>(null);
   const [withdrawVault, setWithdrawVault] = useState<Vault | null>(null);
 
-  const { data: protection } = usePriceProtection();
   const { data: btcPrice } = useBtcPrice();
 
   useEffect(() => {
@@ -65,10 +66,8 @@ export function AppShell() {
     setSheet("withdraw");
   };
 
-  // Alert theme: price protection is ON, or BTC price dropped past threshold
-  const thresholdPct = protection?.threshold_pct ?? 10;
-  const priceDropped = (btcPrice?.change30m ?? 0) <= -thresholdPct;
-  const alertTheme = protection?.enabled === true || priceDropped;
+  // Alert theme: price dropped past the platform 2% threshold
+  const alertTheme = (btcPrice?.change30m ?? 0) <= -PRICE_PROTECTION_THRESHOLD_PCT;
 
   return (
     <div className={`min-h-screen w-full bg-background flex items-center justify-center md:p-8 relative overflow-hidden${alertTheme ? " theme-alert" : ""}`}>
@@ -81,7 +80,6 @@ export function AppShell() {
           onSelect={(t) => { setTab(t); setDrawerOpen(false); }}
           onSettings={() => { setDrawerOpen(false); setSheet("settings"); }}
           onHelp={() => { setDrawerOpen(false); setSheet("help"); }}
-          onPriceProtection={() => { setDrawerOpen(false); setTab("profile"); }}
           onLogout={logout}
         />
 

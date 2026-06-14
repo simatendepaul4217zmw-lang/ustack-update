@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronRight, Fingerprint, Bell, ShieldCheck, HelpCircle, Info, LogOut, Lock } from "lucide-react";
+import { ChevronRight, Fingerprint, Bell, ShieldCheck, HelpCircle, Info, LogOut, Lock, Zap } from "lucide-react";
 import { useAuth } from "@/lib/context/auth-context";
-import { usePriceProtection, useUpdatePriceProtection } from "@/lib/hooks/useAppData";
 
 export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
   onEdit: () => void;
@@ -11,30 +10,7 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
   onLogout: () => void;
 }) {
   const { user, profile } = useAuth();
-  const { data: ppData } = usePriceProtection();
-  const updatePp = useUpdatePriceProtection();
-
-  const [protection, setProtection] = useState(false);
   const [biometrics, setBiometrics] = useState(false);
-  const [threshold, setThreshold] = useState(5);
-
-  useEffect(() => {
-    if (ppData) {
-      setProtection(ppData.enabled);
-      const validOptions = [5, 10, 20];
-      setThreshold(validOptions.includes(ppData.threshold_pct) ? ppData.threshold_pct : 5);
-    }
-  }, [ppData]);
-
-  const handleProtectionToggle = (v: boolean) => {
-    setProtection(v);
-    updatePp.mutate({ enabled: v, thresholdPct: threshold });
-  };
-
-  const handleThreshold = (v: number) => {
-    setThreshold(v);
-    updatePp.mutate({ enabled: protection, thresholdPct: v });
-  };
 
   const displayName = profile?.display_name ?? user?.username ?? "—";
   const initials = profile?.avatar_initials ?? user?.username?.slice(0, 2).toUpperCase() ?? "??";
@@ -63,32 +39,47 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
         </button>
       </div>
 
-      {/* Price Protection card */}
-      <div className="rounded-3xl bg-card border border-white/8 p-5">
-        <div className="relative flex items-start justify-between">
-          <div>
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">Price Protection</div>
-            <div className="text-lg font-semibold mt-1">Auto-shield your stack</div>
+      {/* Price Protection — always active platform feature */}
+      <div className="rounded-3xl overflow-hidden" style={{ background: "linear-gradient(135deg, oklch(0.22 0.06 250) 0%, oklch(0.18 0.04 250) 100%)", border: "1px solid oklch(0.78 0.14 190 / 0.2)" }}>
+        <div className="p-5">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "oklch(0.78 0.14 190 / 0.15)" }}>
+                <ShieldCheck className="w-5 h-5" style={{ color: "oklch(0.82 0.13 190)" }} />
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-widest text-muted-foreground">Platform Feature</div>
+                <div className="text-base font-semibold mt-0.5">Price Protection</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "oklch(0.78 0.14 190 / 0.15)" }}>
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "oklch(0.82 0.13 190)" }} />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.13 190)" }} />
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "oklch(0.82 0.13 190)" }}>Always On</span>
+            </div>
           </div>
-          <Toggle on={protection} onChange={handleProtectionToggle} />
-        </div>
-        <div className="relative mt-4 text-sm text-muted-foreground">
-          Protect if Bitcoin drops by <span className="text-foreground font-semibold">{threshold}%</span>.
-        </div>
-        <div className="relative mt-3 flex gap-2">
-          {[5, 10, 20].map((v) => (
-            <button
-              key={v}
-              onClick={() => handleThreshold(v)}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition ${threshold === v ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}
-            >
-              {v}%
-            </button>
-          ))}
-        </div>
-        <div className="relative mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          {protection ? "Protection active" : "Protection disabled"}
+
+          <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+            UStack automatically shields every user's stack when Bitcoin drops by{" "}
+            <span className="font-semibold" style={{ color: "oklch(0.82 0.13 190)" }}>2%</span>{" "}
+            or more. No setup required — it's built into the platform.
+          </p>
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {[
+              { icon: Zap, label: "Instant", sub: "Real-time alerts" },
+              { icon: ShieldCheck, label: "2% Threshold", sub: "Fixed for all users" },
+              { icon: Lock, label: "Automatic", sub: "Always watching" },
+            ].map(({ icon: Icon, label, sub }) => (
+              <div key={label} className="rounded-xl p-3 text-center" style={{ background: "oklch(0.78 0.14 190 / 0.08)" }}>
+                <Icon className="w-4 h-4 mx-auto mb-1.5" style={{ color: "oklch(0.82 0.13 190)" }} />
+                <div className="text-[10px] font-semibold text-foreground">{label}</div>
+                <div className="text-[9px] text-muted-foreground mt-0.5">{sub}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

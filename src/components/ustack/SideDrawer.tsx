@@ -1,29 +1,27 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Home, Wallet, Activity, User, Settings, ShieldCheck, HelpCircle, LogOut } from "lucide-react";
+import { Home, Wallet, Activity, User, Settings, HelpCircle, LogOut } from "lucide-react";
 import { Logo } from "./Logo";
 import { useAuth } from "@/lib/context/auth-context";
 import type { Tab } from "./BottomNav";
 
 const items = [
-  { id: "home",       icon: Home,        label: "Home",            group: "nav" },
-  { id: "vaults",     icon: Wallet,      label: "Vaults",          group: "nav" },
-  { id: "activity",   icon: Activity,    label: "Activity",        group: "nav" },
-  { id: "profile",    icon: User,        label: "Profile",         group: "nav" },
-  { id: "protection", icon: ShieldCheck, label: "Price Protection", group: "action" },
-  { id: "settings",   icon: Settings,    label: "Settings",        group: "action" },
-  { id: "help",       icon: HelpCircle,  label: "Help & Support",  group: "action" },
-  { id: "logout",     icon: LogOut,      label: "Log out",         group: "danger" },
+  { id: "home",     icon: Home,        label: "Home",           group: "nav" },
+  { id: "vaults",   icon: Wallet,      label: "Vaults",         group: "nav" },
+  { id: "activity", icon: Activity,    label: "Activity",       group: "nav" },
+  { id: "profile",  icon: User,        label: "Profile",        group: "nav" },
+  { id: "settings", icon: Settings,    label: "Settings",       group: "action" },
+  { id: "help",     icon: HelpCircle,  label: "Help & Support", group: "action" },
+  { id: "logout",   icon: LogOut,      label: "Log out",        group: "danger" },
 ] as const;
 
 type ItemId = typeof items[number]["id"];
 
-export function SideDrawer({ open, onClose, onSelect, onSettings, onHelp, onPriceProtection, onLogout }: {
+export function SideDrawer({ open, onClose, onSelect, onSettings, onHelp, onLogout }: {
   open: boolean;
   onClose: () => void;
   onSelect: (t: Tab) => void;
   onSettings: () => void;
   onHelp: () => void;
-  onPriceProtection: () => void;
   onLogout: () => void;
 }) {
   const { user, profile } = useAuth();
@@ -36,7 +34,6 @@ export function SideDrawer({ open, onClose, onSelect, onSettings, onHelp, onPric
       onSelect(id as Tab);
     } else if (id === "settings") onSettings();
     else if (id === "help") onHelp();
-    else if (id === "protection") onPriceProtection();
     else if (id === "logout") onLogout();
     else onClose();
   };
