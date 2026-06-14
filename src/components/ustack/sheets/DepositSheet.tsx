@@ -96,7 +96,7 @@ export function DepositSheet({
   };
 
   const selectVault = (v: Vault) => { setSelectedVault(v); setStep("method"); };
-  const destLabel = dest === "balance" ? "Main Balance" : selectedVault?.name ?? "Vault";
+  const destLabel = dest === "balance" ? "Available Balance" : selectedVault?.name ?? "Vault";
 
   const canConfirm = () => {
     if (tab === "lightning") return !!invoiceData;
@@ -151,7 +151,7 @@ export function DepositSheet({
                   <Wallet className="w-6 h-6" />
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-semibold">Main Balance</div>
+                  <div className="text-sm font-semibold">Available Balance</div>
                   <div className="text-xs text-muted-foreground mt-0.5">Add sats directly to your available balance</div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />

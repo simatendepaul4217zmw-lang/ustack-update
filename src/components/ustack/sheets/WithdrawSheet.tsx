@@ -130,7 +130,7 @@ export function WithdrawSheet({
 
   const titleMap: Record<Step, string | undefined> = {
     source: "Transfer", vault: "Select Vault", locked: vault?.name,
-    amount: vaultContext ? vaultContext.name : (source === "balance" ? "Main Balance" : vault?.name),
+    amount: vaultContext ? vaultContext.name : (source === "balance" ? "Available Balance" : vault?.name),
     warning: "Early Transfer", done: "Transfer Sent",
   };
 
@@ -146,7 +146,7 @@ export function WithdrawSheet({
               <button onClick={() => selectSource("balance")} className="flex items-center gap-4 rounded-2xl glass p-5 text-left transition active:scale-[0.98] border border-transparent hover:border-white/10">
                 <div className="w-12 h-12 rounded-xl bg-card border border-white/8 flex items-center justify-center shrink-0" style={{ color: "oklch(0.78 0.14 190)" }}><Wallet className="w-6 h-6" /></div>
                 <div className="flex-1">
-                  <div className="text-sm font-semibold">Main Balance</div>
+                  <div className="text-sm font-semibold">Available Balance</div>
                   <div className="text-xs text-muted-foreground mt-0.5">Available: <span className="text-foreground font-medium">{fmtSats(availableSats)} sats</span></div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -365,7 +365,7 @@ export function WithdrawSheet({
             <div className="text-lg font-semibold">Transfer Initiated</div>
             <div className="text-sm text-muted-foreground"><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span> is on its way via {methodLabel}.</div>
             <div className="w-full rounded-2xl glass p-4 text-left flex flex-col gap-2.5 text-xs text-muted-foreground">
-              <div className="flex justify-between"><span>Source</span><span className="text-foreground font-medium">{source === "balance" ? "Main Balance" : vault?.name}</span></div>
+              <div className="flex justify-between"><span>Source</span><span className="text-foreground font-medium">{source === "balance" ? "Available Balance" : vault?.name}</span></div>
               <div className="flex justify-between"><span>Method</span><span className="text-foreground font-medium">
                 {method === "lightning" ? "Lightning" : method === "onchain" ? "On-chain Bitcoin" : `${provider} (Mobile Money)`}
               </span></div>
