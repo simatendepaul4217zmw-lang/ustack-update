@@ -1,6 +1,7 @@
 import { getServerConfig } from "../config.server";
 import { creditWallet } from "./wallet.functions";
 import { execute, queryOne } from "../db/index.server";
+import { getTreasuryState, getUsdWalletId } from "./treasury.server";
 
 export interface Invoice {
   paymentRequest: string;
@@ -107,7 +108,32 @@ export async function createLightningInvoice(
     };
   }
 
-  const walletId = await getBlinkWalletId(config);
+  // Deposit routing: use USD wallet when treasury is in USD protection mode
+  const treasuryState = await getTreasuryState().catch(() => null);
+  const isUsdMode = treasuryState?.current_mode === "usd";
+
+  let walletId: string;
+  if (isUsdMode) {
+    walletId = await getUsdWalletId();
+    console.log("[blink] Deposit routing: USD wallet (treasury in protection mode)");
+  } else {
+    walletId = await getBlinkWalletId(config);
+  }
+
+  // USD wallet uses lnUsdInvoiceCreate (amounts in cents), BTC uses lnInvoiceCreate (sats)
+  const mutation = isUsdMode
+    ? `mutation LnUsdInvoiceCreate($input: LnUsdInvoiceCreateOnBehalfOfRecipientInput!) {
+        lnUsdInvoiceCreateOnBehalfOfRecipient(input: $input) {
+          invoice { paymentRequest paymentHash satoshis }
+          errors { message }
+        }
+      }`
+    : `mutation LnInvoiceCreate($input: LnInvoiceCreateInput!) {
+        lnInvoiceCreate(input: $input) {
+          invoice { paymentRequest paymentHash satoshis }
+          errors { message }
+        }
+      }`;
 
   const res = await fetch(config.blinkApiUrl, {
     method: "POST",
@@ -116,12 +142,7 @@ export async function createLightningInvoice(
       "X-API-KEY": config.blinkApiKey!,
     },
     body: JSON.stringify({
-      query: `mutation LnInvoiceCreate($input: LnInvoiceCreateInput!) {
-        lnInvoiceCreate(input: $input) {
-          invoice { paymentRequest paymentHash satoshis }
-          errors { message }
-        }
-      }`,
+      query: mutation,
       variables: {
         input: { walletId, amount: amountSats, memo: memo ?? "UStack deposit" },
       },

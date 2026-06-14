@@ -1,0 +1,303 @@
+Add a Global Treasury Price Protection System to UStack.
+
+OVERVIEW
+
+UStack uses a single pooled treasury backed by Blink.
+
+All user balances, vaults, and savings goals are tracked internally in the UStack database.
+
+Price Protection is NOT configurable per user.
+
+Protection applies to ALL users automatically.
+
+The entire treasury will always be in one of two states:
+
+* BTC Mode
+* USD Mode
+
+When Bitcoin drops beyond the protection threshold, the system automatically swaps the treasury from BTC to USD.
+
+When Bitcoin recovers, the system automatically swaps the treasury from USD back to BTC.
+
+All users participate equally.
+
+DATABASE
+
+Create a new table:
+
+treasury_state
+
+Fields:
+
+* id
+* current_mode (btc | usd)
+* reference_price_usd
+* protection_threshold_pct
+* confirmation_minutes
+* pending_action
+* pending_started_at
+* last_transition_at
+* btc_balance_sats
+* usd_balance_cents
+* created_at
+* updated_at
+
+There should only be one active treasury_state record.
+
+DEFAULT SETTINGS
+
+Protection Threshold:
+
+2%
+
+Confirmation Time:
+
+5 minutes
+
+System starts in BTC mode.
+
+PROTECTION LOGIC
+
+Reference Price Example:
+
+$100,000
+
+Trigger Threshold:
+
+2%
+
+Protection Price:
+
+$98,000
+
+If Bitcoin falls below $98,000:
+
+* Start confirmation timer
+* Wait 5 minutes
+
+If Bitcoin remains below threshold after 5 minutes:
+
+Execute Blink swap:
+
+BTC Wallet → USD Wallet
+
+Update treasury_state:
+
+current_mode = usd
+
+Store:
+
+last_transition_at
+
+Create system activity log.
+
+Create user notifications.
+
+RECOVERY LOGIC
+
+When in USD mode:
+
+Monitor Bitcoin price.
+
+When price recovers above the recovery level:
+
+Start confirmation timer.
+
+Wait 5 minutes.
+
+If recovery remains valid:
+
+Execute Blink swap:
+
+USD Wallet → BTC Wallet
+
+Update treasury_state:
+
+current_mode = btc
+
+Store:
+
+last_transition_at
+
+Create system activity log.
+
+Create user notifications.
+
+BTC PRICE SERVICE
+
+Run a background service every minute.
+
+Responsibilities:
+
+* Fetch BTC/USD price
+* Store in btc_prices table
+* Evaluate protection conditions
+* Evaluate recovery conditions
+* Manage confirmation timers
+
+BLINK INTEGRATION
+
+Create a Blink Treasury Service.
+
+Functions:
+
+* getTreasuryBalances()
+* getBtcBalance()
+* getUsdBalance()
+* swapBtcToUsd()
+* swapUsdToBtc()
+
+Use the Blink BTC wallet and USD wallet.
+
+The treasury is the source of funds.
+
+Individual users do NOT have Blink wallets.
+
+USER BALANCES
+
+Do NOT modify:
+
+wallets
+vaults
+transactions
+
+User balances remain tracked internally.
+
+Example:
+
+Paul:
+15,000 sats
+
+Mary:
+50,000 sats
+
+John:
+100,000 sats
+
+Total Treasury:
+165,000 sats
+
+When protection activates:
+
+Treasury converts to USD.
+
+Users keep their balances.
+
+Their displayed value updates according to the current treasury state.
+
+NOTIFICATIONS
+
+Create notifications for all users:
+
+Protection Activated
+
+Example:
+
+"Bitcoin dropped 2%. UStack has moved treasury funds into USD protection mode."
+
+Protection Removed
+
+Example:
+
+"Bitcoin recovered. UStack has moved treasury funds back into Bitcoin."
+
+ACTIVITY LOGS
+
+Create system activity logs:
+
+Protection Trigger Detected
+
+Protection Confirmation Started
+
+Treasury Converted To USD
+
+Recovery Detected
+
+Recovery Confirmation Started
+
+Treasury Converted To BTC
+
+ADMIN FUNCTIONS
+
+No admin panel required.
+
+Create backend endpoints only:
+
+GET /api/treasury/status
+
+Returns:
+
+* current_mode
+* current_price
+* protection_price
+* last_transition_at
+
+GET /api/treasury/history
+
+Returns treasury transitions.
+
+UI
+
+Add a new page:
+
+Treasury Protection
+
+Display:
+
+Current Treasury Mode
+
+BTC Mode
+or
+USD Protection Mode
+
+Current Bitcoin Price
+
+Protection Threshold
+
+2%
+
+Last Transition
+
+Protection Status
+
+Examples:
+
+"Monitoring"
+
+"Confirmation In Progress"
+
+"Protected"
+
+Display educational text:
+
+"UStack automatically protects all user savings during significant Bitcoin market declines by moving treasury funds between BTC and USD."
+
+SECURITY
+
+Only one protection transition may occur at a time.
+
+Prevent duplicate swaps.
+
+Record all swaps.
+
+Record all state changes.
+
+Store all Blink transaction IDs.
+
+Create rollback handling for failed swaps.
+
+TECHNICAL REQUIREMENTS
+
+Use TypeScript.
+
+Use existing UStack architecture.
+
+Implement:
+
+* Treasury Protection Service
+* BTC Price Service
+* Blink Treasury Service
+* Notification Service Integration
+* Activity Log Integration
+
+Produce complete backend implementation, database migration, API routes, service layer, scheduled jobs, and frontend integration.

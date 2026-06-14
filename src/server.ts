@@ -2,6 +2,11 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { startPriceLoop } from "./lib/api/price-loop.server";
+import { handleTreasuryApi } from "./lib/api/treasury-api.server";
+
+// Start the price watch + treasury protection loop on server boot
+startPriceLoop();
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -40,6 +45,13 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+
+      // Handle treasury API routes directly (createAPIFileRoute doesn't work in Vite dev mode)
+      if (url.pathname.startsWith("/api/treasury-")) {
+        return await handleTreasuryApi(request, url.pathname);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
