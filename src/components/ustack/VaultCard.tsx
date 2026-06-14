@@ -10,8 +10,26 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
   const { fmtValue } = useCurrency();
   const { data: btcPrice } = useBtcPrice();
   const priceZmw = btcPrice?.priceZmw;
-  const pct = vault.currentSats / vault.goalSats;
+
   const accent = ACCENT_COLORS[vault.accent] ?? ACCENT_COLORS.btc;
+
+  // Hodl → time progress through lock; Stack → sats toward goal
+  const satsPct = vault.goalSats > 0 ? vault.currentSats / vault.goalSats : 0;
+  const ringPct = vault.type === "hodl"
+    ? (vault.lockProgressPct ?? 0)
+    : satsPct;
+
+  // Ring centre label
+  const ringLabel = vault.type === "hodl"
+    ? `${vault.daysRemaining}d`
+    : `${Math.round(satsPct * 100)}%`;
+
+  // Bottom-right stat
+  const statLabel = vault.type === "hodl"
+    ? `${vault.daysRemaining}d left`
+    : `${vault.streakDays}d streak`;
+  const statSub = vault.type === "hodl" ? "Time locked" : "Flexible";
+
   return (
     <motion.button
       whileHover={{ y: -2 }}
@@ -27,8 +45,8 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
           </div>
           <div className="text-base font-semibold mt-1 leading-tight">{vault.name}</div>
         </div>
-        <ProgressRing value={pct} size={52} accent={vault.accent}>
-          <span className="text-[10px] font-semibold tabular-nums">{Math.round(pct * 100)}%</span>
+        <ProgressRing value={ringPct} size={52} accent={vault.accent}>
+          <span className="text-[10px] font-semibold tabular-nums leading-none">{ringLabel}</span>
         </ProgressRing>
       </div>
 
@@ -39,20 +57,25 @@ export function VaultCard({ vault, onClick, large = false }: { vault: Vault; onC
           </div>
           <div className="text-[10px] text-muted-foreground">Saved</div>
           <div className="text-sm font-semibold tabular-nums">{fmtValue(vault.currentSats, priceZmw)}</div>
-          <div className="text-[10px] text-muted-foreground/60 tabular-nums">{(vault.currentSats / 1000).toFixed(0)}k sats</div>
+          <div className="text-[10px] text-muted-foreground/60 tabular-nums">
+            {vault.currentSats.toLocaleString()} / {vault.goalSats.toLocaleString()} sats
+          </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] text-muted-foreground">
-            {vault.type === "hodl" ? `${vault.daysRemaining}d left` : `${vault.streakDays}d streak`}
-          </div>
-          <div className="text-xs font-medium">
-            {vault.type === "hodl" ? "Time-locked" : "Flexible"}
-          </div>
+          <div className="text-[10px] text-muted-foreground">{statLabel}</div>
+          <div className="text-xs font-medium">{statSub}</div>
         </div>
       </div>
 
+      {/* Bottom progress bar — always shows sats progress */}
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
-        <motion.div initial={{ width: 0 }} animate={{ width: `${pct * 100}%` }} transition={{ duration: 1 }} className="h-full" style={{ background: accent }} />
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.min(satsPct, 1) * 100}%` }}
+          transition={{ duration: 1 }}
+          className="h-full"
+          style={{ background: accent }}
+        />
       </div>
     </motion.button>
   );

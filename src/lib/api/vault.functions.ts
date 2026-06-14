@@ -190,9 +190,21 @@ export const withdrawFromVault = createServerFn({ method: "POST" })
 function normalizeVault(v: Vault) {
   const nowMs = Date.now();
   const lockedUntilMs = v.locked_until ? new Date(v.locked_until).getTime() : 0;
+  const createdAtMs = v.created_at ? new Date(v.created_at).getTime() : nowMs;
+
   const daysRemaining = lockedUntilMs > nowMs
     ? Math.ceil((lockedUntilMs - nowMs) / (1000 * 60 * 60 * 24))
     : 0;
+
+  // Time-based progress for hodl vaults: 0→1 over the full lock duration
+  const lockDurationMs = lockedUntilMs > 0 ? lockedUntilMs - createdAtMs : 0;
+  const lockElapsedMs = Math.max(0, nowMs - createdAtMs);
+  const lockProgressPct = lockDurationMs > 0
+    ? Math.min(lockElapsedMs / lockDurationMs, 1)
+    : 0;
+
+  // Days since vault was created (useful for stack vaults)
+  const daysSinceCreated = Math.floor((nowMs - createdAtMs) / (1000 * 60 * 60 * 24));
 
   return {
     id: v.id,
@@ -205,7 +217,9 @@ function normalizeVault(v: Vault) {
     goalFiat: Number(v.goal_fiat ?? 0),
     currency: v.currency,
     daysRemaining,
+    daysSinceCreated,
     streakDays: Number(v.streak_days),
+    lockProgressPct,
     locked: !!v.locked_until && new Date(v.locked_until) > new Date(),
     lockedUntil: v.locked_until,
     penaltyPct: v.withdrawal_penalty_pct,

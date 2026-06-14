@@ -9,7 +9,9 @@ export interface Vault {
   goalFiat: number;
   currency: string;
   daysRemaining: number;
+  daysSinceCreated?: number;
   streakDays: number;
+  lockProgressPct?: number;
   locked: boolean;
   accent: "btc" | "purple" | "teal" | "blue" | "rose" | "gold";
   emoji: string;
