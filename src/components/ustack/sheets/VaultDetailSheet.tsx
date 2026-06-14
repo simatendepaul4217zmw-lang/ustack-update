@@ -170,9 +170,19 @@ export function VaultDetailSheet({ open, vault, onClose, onDeposit, onWithdraw }
         <button onClick={onDeposit} className="flex-1 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl flex items-center justify-center gap-2">
           <Zap className="w-4 h-4" /> Add Sats
         </button>
-        <button onClick={onWithdraw} className="flex-1 glass font-semibold py-4 rounded-2xl flex items-center justify-center gap-2">
-          <ArrowLeftRight className="w-4 h-4" /> Transfer
-        </button>
+        {vault.type === "hodl" && vault.locked ? (
+          <div className="flex-1 glass font-semibold py-4 rounded-2xl flex items-center justify-center gap-2 opacity-40 cursor-not-allowed select-none text-muted-foreground">
+            <Lock className="w-4 h-4" /> Locked
+          </div>
+        ) : vault.type === "stack" && satsPct < 1 ? (
+          <button onClick={onWithdraw} className="flex-1 bg-[oklch(0.73_0.19_55)]/15 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/25 font-semibold py-4 rounded-2xl flex items-center justify-center gap-2">
+            <ArrowLeftRight className="w-4 h-4" /> Tap Out
+          </button>
+        ) : (
+          <button onClick={onWithdraw} className="flex-1 glass font-semibold py-4 rounded-2xl flex items-center justify-center gap-2">
+            <ArrowLeftRight className="w-4 h-4" /> Transfer
+          </button>
+        )}
       </div>
     </Sheet>
   );

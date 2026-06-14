@@ -50,7 +50,8 @@ export function WithdrawSheet({
   useEffect(() => {
     if (open && vaultContext) {
       setSource("vault"); setVault(vaultContext);
-      if (vaultContext.locked) setStep("locked");
+      // Only hodl vaults that are still time-locked are completely blocked
+      if (vaultContext.type === "hodl" && vaultContext.locked) setStep("locked");
       else { setAmount(String(Math.floor(vaultContext.currentSats * 0.1))); setStep("amount"); }
     } else if (!open) {
       resetAll();
@@ -72,16 +73,19 @@ export function WithdrawSheet({
 
   const selectVault = (v: Vault) => {
     setVault(v);
-    if (v.locked) setStep("locked");
+    // Only hodl vaults that are still time-locked are completely blocked
+    if (v.type === "hodl" && v.locked) setStep("locked");
     else { setAmount(String(Math.floor(v.currentSats * 0.1))); setStep("amount"); }
   };
 
   const maxAmount = source === "balance" ? availableSats : (vault?.currentSats ?? 0);
   const pct = vault ? vault.currentSats / vault.goalSats : 0;
-  const penaltyPct = vault?.penaltyPct ?? 0;
-  const isEarly = source === "vault" && pct < 1 && penaltyPct > 0;
-  const penalty = Math.floor((Number(amount) || 0) * penaltyPct / 100);
-  const receiveAmount = Number(amount) - (isEarly ? penalty : 0);
+  const penaltyPct = vault?.penaltyPct ?? 45;
+  // Penalty only applies to stack vaults that haven't reached their goal.
+  // Hodl vaults are either completely blocked (locked) or free (expired).
+  const isEarly = source === "vault" && vault?.type === "stack" && pct < 1;
+  const penalty = isEarly ? Math.floor((Number(amount) || 0) * penaltyPct / 100) : 0;
+  const receiveAmount = Number(amount) - penalty;
 
   const isValidOnchain = (addr: string) =>
     /^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,62}$/.test(addr.trim());
@@ -173,16 +177,32 @@ export function WithdrawSheet({
             <div className="flex flex-col gap-2">
               {vaults.map((v) => {
                 const p = v.currentSats / v.goalSats;
+                const hodlLocked = v.type === "hodl" && v.locked;
+                const stackEarly = v.type === "stack" && p < 1;
+                const pctLabel = p > 0 && Math.round(p * 100) === 0 ? "<1%" : `${Math.round(p * 100)}%`;
                 return (
                   <button key={v.id} onClick={() => selectVault(v)} className="flex items-center gap-3 rounded-2xl glass p-4 text-left transition active:scale-[0.98]">
                     <div className="w-11 h-11 rounded-xl shrink-0 flex items-center justify-center" style={{ background: `${ACCENT_COLORS[v.accent] ?? ACCENT_COLORS.btc}20`, color: ACCENT_COLORS[v.accent] ?? ACCENT_COLORS.btc }}><VaultIcon name={v.emoji} className="w-5 h-5" /></div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold truncate">{v.name}</span>
-                        {v.locked && <span className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/10 text-muted-foreground shrink-0"><Lock className="w-2.5 h-2.5" /> Locked</span>}
-                        {!v.locked && <span className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full text-[oklch(0.82_0.13_190)] bg-[oklch(0.82_0.13_190)]/10 shrink-0"><TrendingUp className="w-2.5 h-2.5" /> {v.type}</span>}
+                        {hodlLocked && (
+                          <span className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/10 text-muted-foreground shrink-0">
+                            <Lock className="w-2.5 h-2.5" /> Hodl locked
+                          </span>
+                        )}
+                        {stackEarly && !hodlLocked && (
+                          <span className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[oklch(0.73_0.19_55)]/15 text-[oklch(0.85_0.15_55)] shrink-0">
+                            <AlertTriangle className="w-2.5 h-2.5" /> 45% fee
+                          </span>
+                        )}
+                        {!hodlLocked && !stackEarly && (
+                          <span className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full text-[oklch(0.82_0.13_190)] bg-[oklch(0.82_0.13_190)]/10 shrink-0">
+                            <TrendingUp className="w-2.5 h-2.5" /> Free
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{fmtSats(v.currentSats)} · {Math.round(p * 100)}% of goal</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{fmtSats(v.currentSats)} · {pctLabel} of goal</div>
                       <div className="mt-2 h-1 rounded-full bg-white/10 overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${Math.min(p * 100, 100)}%`, background: ACCENT_COLORS[v.accent] ?? ACCENT_COLORS.btc }} />
                       </div>
@@ -195,20 +215,22 @@ export function WithdrawSheet({
           </motion.div>
         )}
 
-        {/* Step 2b: Locked vault */}
+        {/* Step 2b: Hodl locked — no exit */}
         {step === "locked" && vault && (
           <motion.div key="locked" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col items-center text-center gap-3">
               <div className="w-16 h-16 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.73 0.19 55)" }}><Lock className="w-8 h-8" /></div>
-              <div className="text-base font-semibold">This vault is locked</div>
-              <div className="text-sm text-muted-foreground leading-relaxed"><span className="font-semibold text-foreground">{vault.name}</span> is a Hodl Vault. Sats are time-locked until the lock period expires.</div>
+              <div className="text-base font-semibold">Hodl vault — no tap-out</div>
+              <div className="text-sm text-muted-foreground leading-relaxed">
+                <span className="font-semibold text-foreground">{vault.name}</span> is time-locked. There is no early exit — not even with a fee. Sats are locked until the period ends.
+              </div>
               <div className="w-full rounded-xl bg-white/5 p-4 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Days remaining</span>
                 <span className="text-sm font-semibold">{vault.daysRemaining} days</span>
               </div>
-              <p className="text-xs text-muted-foreground">Stay disciplined. Future you will be grateful.</p>
+              <p className="text-xs text-muted-foreground">That's the point. Future you will be grateful. 🔐</p>
             </div>
-            <button onClick={vaultContext ? reset : () => setStep("vault")} className="mt-5 w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">Keep Stacking</button>
+            <button onClick={vaultContext ? reset : () => setStep("vault")} className="mt-5 w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">Got it — Keep Hodling</button>
           </motion.div>
         )}
 
@@ -254,8 +276,8 @@ export function WithdrawSheet({
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
                   {error && <p className="text-sm text-destructive text-center">{error}</p>}
-                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2">
-                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
+                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
+                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isEarly ? `Tap Out (${penaltyPct}% fee)` : "Continue"}
                   </button>
                 </motion.div>
               )}
@@ -282,8 +304,8 @@ export function WithdrawSheet({
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
                   {error && <p className="text-sm text-destructive text-center">{error}</p>}
-                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2">
-                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
+                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
+                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isEarly ? `Tap Out (${penaltyPct}% fee)` : "Continue"}
                   </button>
                 </motion.div>
               )}
@@ -328,8 +350,8 @@ export function WithdrawSheet({
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
                   {error && <p className="text-sm text-destructive text-center">{error}</p>}
-                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2">
-                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Continue"}
+                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
+                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isEarly ? `Tap Out (${penaltyPct}% fee)` : "Continue"}
                   </button>
                 </motion.div>
               )}
@@ -337,27 +359,33 @@ export function WithdrawSheet({
           </motion.div>
         )}
 
-        {/* Step 4: Early withdrawal warning */}
+        {/* Step 4: Tap-out penalty confirmation */}
         {step === "warning" && vault && (
           <motion.div key="warning" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <div className="rounded-2xl border border-[oklch(0.73_0.19_55)]/30 bg-[oklch(0.73_0.19_55)]/10 p-5">
               <div className="flex items-center gap-2 mb-3">
                 <AlertTriangle className="w-5 h-5 text-[oklch(0.73_0.19_55)]" />
-                <div className="text-sm font-semibold">Early Transfer Warning</div>
+                <div className="text-sm font-semibold">Tap-Out Penalty</div>
               </div>
+              <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                Your <span className="text-foreground font-semibold">{vault.name}</span> vault hasn't reached its goal yet. Tapping out early costs you {penaltyPct}% — designed to keep you from spending what you're saving.
+              </p>
               <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                <div className="flex justify-between"><span>Transfer amount</span><span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span></div>
-                <div className="flex justify-between text-[oklch(0.85_0.15_55)]"><span>Early exit penalty ({penaltyPct}%)</span><span className="font-semibold">-{fmtSats(penalty)}</span></div>
+                <div className="flex justify-between"><span>Withdrawal amount</span><span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span></div>
+                <div className="flex justify-between text-[oklch(0.85_0.15_55)]"><span>Tap-out penalty ({penaltyPct}%)</span><span className="font-semibold">−{fmtSats(penalty)}</span></div>
                 <div className="h-px bg-white/10 my-1" />
-                <div className="flex justify-between"><span>You will receive</span><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span></div>
+                <div className="flex justify-between"><span>You receive</span><span className="text-foreground font-semibold">{fmtSats(receiveAmount)}</span></div>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">You're <span className="text-foreground font-semibold">{Math.round(pct * 100)}%</span> of the way to your goal in <span className="text-foreground font-semibold">{vault.name}</span>.</p>
+              <div className="mt-4 rounded-xl bg-white/5 px-3 py-2.5 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Goal progress</span>
+                <span className="font-semibold">{pct > 0 && Math.round(pct * 100) === 0 ? "<1" : Math.round(pct * 100)}% of {vault.goalSats.toLocaleString()} sats</span>
+              </div>
             </div>
             {error && <p className="mt-3 text-sm text-destructive text-center">{error}</p>}
             <div className="mt-5 flex gap-3">
-              <button onClick={() => setStep("amount")} className="flex-1 glass py-4 rounded-2xl font-semibold text-sm">Keep stacking</button>
+              <button onClick={() => setStep("amount")} className="flex-1 glass py-4 rounded-2xl font-semibold text-sm">Stay the course</button>
               <button disabled={isPending} onClick={handleWithdraw} className="flex-1 bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30 py-4 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-40">
-                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Transfer anyway"}
+                {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Tap out anyway"}
               </button>
             </div>
           </motion.div>

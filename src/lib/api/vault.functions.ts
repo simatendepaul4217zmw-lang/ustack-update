@@ -157,11 +157,19 @@ export const withdrawFromVault = createServerFn({ method: "POST" })
     if (!vault) throw new Error("Vault not found");
     if (Number(vault.current_sats) < data.amountSats) throw new Error("Insufficient vault balance");
 
-    // Check lock
-    const isLocked = vault.locked_until && new Date(vault.locked_until) > new Date();
+    // Hodl vaults are completely blocked while time-locked
+    if (vault.vault_type === "hodl") {
+      const isTimeLocked = vault.locked_until && new Date(vault.locked_until) > new Date();
+      if (isTimeLocked) throw new Error("Hodl vault is time-locked. Withdrawal is not permitted until the lock expires.");
+    }
+
+    // Stack vaults: apply penalty if below goal
     let penalty = 0;
-    if (isLocked && vault.withdrawal_penalty_pct > 0) {
-      penalty = Math.floor(data.amountSats * vault.withdrawal_penalty_pct / 100);
+    if (vault.vault_type === "stack") {
+      const satsPct = Number(vault.current_sats) / Number(vault.goal_sats);
+      if (satsPct < 1 && vault.withdrawal_penalty_pct > 0) {
+        penalty = Math.floor(data.amountSats * vault.withdrawal_penalty_pct / 100);
+      }
     }
     const net = data.amountSats - penalty;
 
