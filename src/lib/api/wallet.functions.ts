@@ -16,8 +16,16 @@ export const getWallet = createServerFn({ method: "POST" })
       open_vault_sats: string;
     }>(
       `SELECT w.available_sats, w.vault_sats,
-       COALESCE(SUM(CASE WHEN v.locked_until > NOW() THEN v.current_sats ELSE 0 END), 0)::bigint AS locked_vault_sats,
-       COALESCE(SUM(CASE WHEN v.locked_until IS NULL OR v.locked_until <= NOW() THEN v.current_sats ELSE 0 END), 0)::bigint AS open_vault_sats
+       COALESCE(SUM(CASE
+         WHEN v.vault_type = 'hodl' AND v.locked_until > NOW() THEN v.current_sats
+         WHEN v.vault_type = 'stack' AND v.current_sats < v.goal_sats THEN v.current_sats
+         ELSE 0
+       END), 0)::bigint AS locked_vault_sats,
+       COALESCE(SUM(CASE
+         WHEN v.vault_type = 'hodl' AND (v.locked_until IS NULL OR v.locked_until <= NOW()) THEN v.current_sats
+         WHEN v.vault_type = 'stack' AND v.current_sats >= v.goal_sats THEN v.current_sats
+         ELSE 0
+       END), 0)::bigint AS open_vault_sats
        FROM wallets w
        LEFT JOIN vaults v ON v.user_id = w.user_id AND v.status = 'active'
        WHERE w.user_id = $1
