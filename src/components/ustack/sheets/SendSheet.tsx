@@ -84,9 +84,9 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
                     <Smartphone className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <div>
-                    <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
+                    <div className="text-base font-semibold">Mobile Money Coming Soon</div>
                     <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
-                      We're finalising our Lipila integration. Sending via Airtel Money, MTN MoMo, and Zamtel Kwacha will be available very soon.
+                      We are working on mobile money support. Sending via Airtel Money, MTN MoMo, and Zamtel Kwacha will be available very soon.
                     </p>
                   </div>
                   <p className="text-xs text-muted-foreground">Use Lightning to send sats for now.</p>

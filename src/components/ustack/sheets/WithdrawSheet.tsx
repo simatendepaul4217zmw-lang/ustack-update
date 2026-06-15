@@ -220,9 +220,9 @@ export function WithdrawSheet({
           <motion.div key="locked" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col items-center text-center gap-3">
               <div className="w-16 h-16 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.73 0.19 55)" }}><Lock className="w-8 h-8" /></div>
-              <div className="text-base font-semibold">Hodl vault — no tap-out</div>
+              <div className="text-base font-semibold">Hodl Vault: No Early Exit</div>
               <div className="text-sm text-muted-foreground leading-relaxed">
-                <span className="font-semibold text-foreground">{vault.name}</span> is time-locked. There is no early exit — not even with a fee. Sats are locked until the period ends.
+                <span className="font-semibold text-foreground">{vault.name}</span> is time-locked. There is no early exit, not even with a fee. Sats stay locked until the period ends.
               </div>
               <div className="w-full rounded-xl bg-white/5 p-4 flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Days remaining</span>
@@ -230,7 +230,7 @@ export function WithdrawSheet({
               </div>
               <p className="text-xs text-muted-foreground">That's the point. Future you will be grateful. 🔐</p>
             </div>
-            <button onClick={vaultContext ? reset : () => setStep("vault")} className="mt-5 w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">Got it — Keep Hodling</button>
+            <button onClick={vaultContext ? reset : () => setStep("vault")} className="mt-5 w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">Got it, Keep Hodling</button>
           </motion.div>
         )}
 
@@ -288,9 +288,9 @@ export function WithdrawSheet({
                     <Smartphone className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <div>
-                    <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
+                    <div className="text-base font-semibold">Mobile Money Coming Soon</div>
                     <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
-                      We're finalising our Lipila integration. MoMo withdrawals (Airtel, MTN, Zamtel) will be available very soon.
+                      We are working on mobile money support. Airtel, MTN MoMo, and Zamtel Kwacha withdrawals will be available very soon.
                     </p>
                   </div>
                   <p className="text-xs text-muted-foreground">Use Lightning or On-chain to transfer your sats for now.</p>
@@ -358,7 +358,7 @@ export function WithdrawSheet({
                 <div className="text-sm font-semibold">Tap-Out Penalty</div>
               </div>
               <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-                Your <span className="text-foreground font-semibold">{vault.name}</span> vault hasn't reached its goal yet. Tapping out early costs you {penaltyPct}% — designed to keep you from spending what you're saving.
+                Your <span className="text-foreground font-semibold">{vault.name}</span> vault hasn't reached its goal yet. Tapping out early costs you {penaltyPct}%, designed to keep you from spending what you're saving.
               </p>
               <div className="flex flex-col gap-2 text-sm text-muted-foreground">
                 <div className="flex justify-between"><span>Withdrawal amount</span><span className="text-foreground font-semibold">{fmtSats(Number(amount))}</span></div>

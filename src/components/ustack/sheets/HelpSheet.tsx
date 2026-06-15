@@ -16,7 +16,7 @@ const faqs = [
   },
   {
     q: "What is Price Protection?",
-    a: "Price Protection is a core UStack feature that monitors Bitcoin price in real time and automatically shields every user's savings if BTC drops by 2% or more. It's always active — no setup needed.",
+    a: "Price Protection is a core UStack feature that monitors Bitcoin price in real time and automatically shields every user's savings if BTC drops by 2% or more. It's always active, no setup needed.",
   },
   {
     q: "How are my sats stored?",

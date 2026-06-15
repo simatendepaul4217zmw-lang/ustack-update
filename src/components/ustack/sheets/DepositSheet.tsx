@@ -247,9 +247,9 @@ export function DepositSheet({
                     <Smartphone className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <div>
-                    <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
+                    <div className="text-base font-semibold">Mobile Money Coming Soon</div>
                     <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
-                      We're finalising our integration with Lipila. Airtel Money, MTN MoMo, and Zamtel Kwacha deposits will be available very soon.
+                      We are working on mobile money support. Airtel Money, MTN MoMo, and Zamtel Kwacha deposits will be available very soon.
                     </p>
                   </div>
                   <div className="w-full rounded-2xl bg-white/5 border border-white/8 p-4 flex flex-col gap-2 text-sm text-muted-foreground text-left">
