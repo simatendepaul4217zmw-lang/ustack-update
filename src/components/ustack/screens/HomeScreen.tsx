@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { Zap, ArrowLeftRight, Eye, EyeOff, Flame, ShieldCheck, TrendingUp, Loader2, ArrowDownToLine } from "lucide-react";
-import { fmtSats, fmtBTC, type Vault } from "@/lib/ustack-data";
+import { tips, fmtSats, fmtBTC, type Vault } from "@/lib/ustack-data";
 import { CountUp } from "../CountUp";
+import { ProgressRing } from "../ProgressRing";
 import { VaultCard } from "../VaultCard";
 import { useWallet } from "@/lib/hooks/useAppData";
 import { useVaults } from "@/lib/hooks/useAppData";
@@ -18,6 +19,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
   onCreateVault: () => void;
 }) {
   const [hidden, setHidden] = useState(false);
+  const [tab, setTab] = useState<"activity" | "insights" | "tips">("activity");
   const { user } = useAuth();
   const { data: wallet } = useWallet();
   const { data: vaults = [] } = useVaults();
