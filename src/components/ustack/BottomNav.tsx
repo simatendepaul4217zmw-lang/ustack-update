@@ -42,7 +42,7 @@ function NavBtn({ id, Icon, label, active, onClick }: { id: Tab; Icon: typeof Ho
 
 export function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   return (
-    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-2rem)]">
+    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)]">
       <div
         className="glass-strong relative flex items-center rounded-full px-2 py-2"
         style={{ boxShadow: "var(--shadow-float)" }}
