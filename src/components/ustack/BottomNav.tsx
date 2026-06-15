@@ -22,17 +22,17 @@ function NavBtn({ id, Icon, label, active, onClick }: { id: Tab; Icon: typeof Ho
         <motion.span
           layoutId="navPill"
           className="absolute inset-0 rounded-full"
-          style={{ background: "oklch(1 0 0 / 0.08)" }}
+          style={{ background: "oklch(1 0 0 / 0.13)" }}
           transition={{ type: "spring", stiffness: 400, damping: 32 }}
         />
       )}
       <Icon
         className="relative h-5 w-5"
-        style={{ color: active ? "oklch(0.82 0.17 140)" : "oklch(0.68 0.015 255)" }}
+        style={{ color: active ? "oklch(0.82 0.17 140)" : "oklch(0.55 0.012 255)" }}
       />
       <span
-        className="relative mt-0.5"
-        style={{ color: active ? "oklch(0.95 0.02 200)" : "oklch(0.6 0.015 255)" }}
+        className="relative mt-0.5 font-semibold"
+        style={{ color: active ? "oklch(1 0 0)" : "oklch(0.52 0.012 255)" }}
       >
         {label}
       </span>
