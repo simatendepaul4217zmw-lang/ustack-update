@@ -1,2 +1,3 @@
 - [pg client-side shim](pg-client-shim.md) — TanStack Start + Vite doesn't tree-shake Node.js deps (pg, jose) from client bundles; requires a custom Vite plugin to stub them.
 - [vault-theme tsx naming](vault-theme-tsx.md) — vault-theme must be .tsx (not .ts) because it exports a JSX VaultIcon component; Vite/esbuild rejects JSX in .ts files.
+- [android-apk-build](android-apk-build.md) — Full Android APK build setup on Replit; Java 21 required, SDK Platform 36 required, nohup doesn't work in sandbox.

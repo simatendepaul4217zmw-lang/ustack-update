@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "t1D4z25W_HcjRIeaLc_AR"
+uri = "file://ustack-debug.tar.gz"
+type = "unspecified"
+title = "UStack Android APK (debug) — extract to get ustack-debug.apk"
