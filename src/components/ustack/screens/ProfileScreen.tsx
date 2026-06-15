@@ -40,17 +40,17 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
       </div>
 
       {/* Price Protection — always active platform feature */}
-      <div className="rounded-2xl border p-4 flex items-center justify-between" style={{ background: "oklch(0.15 0.02 160 / 0.6)", borderColor: "oklch(0.82 0.17 140 / 0.25)" }}>
+      <div className="rounded-2xl glass p-4 flex items-center justify-between border" style={{ borderColor: "oklch(0.82 0.17 140 / 0.3)" }}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "oklch(0.82 0.17 140 / 0.12)", border: "1px solid oklch(0.82 0.17 140 / 0.25)" }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-card border border-white/8">
             <ShieldCheck className="w-5 h-5" style={{ color: "oklch(0.82 0.17 140)" }} />
           </div>
           <div>
-            <div className="text-sm font-semibold">Price Protection</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">Auto-shields at 2% BTC drop</div>
+            <div className="text-sm font-semibold text-foreground">Price Protection</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Auto-shields at 2% BTC drop</div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border shrink-0" style={{ background: "oklch(0.82 0.17 140 / 0.1)", borderColor: "oklch(0.82 0.17 140 / 0.3)" }}>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border shrink-0" style={{ borderColor: "oklch(0.82 0.17 140 / 0.4)" }}>
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: "oklch(0.82 0.17 140)" }} />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.17 140)" }} />
