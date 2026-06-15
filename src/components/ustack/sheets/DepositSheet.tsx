@@ -242,44 +242,24 @@ export function DepositSheet({
 
             <AnimatePresence mode="wait">
               {tab === "momo" ? (
-                <motion.div key="momo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Provider</div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {PROVIDERS.map((p) => (
-                        <button key={p.value} onClick={() => setProvider(p.value)} className={`py-3 rounded-xl text-xs font-medium transition ${provider === p.value ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}>{p.label}</button>
-                      ))}
-                    </div>
+                <motion.div key="momo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center text-center gap-4 py-6">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <Smartphone className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Your mobile money number</div>
-                    <div className="rounded-2xl glass p-4 flex items-center gap-3">
-                      <div className="text-sm text-muted-foreground shrink-0">+260</div>
-                      <div className="w-px h-5 bg-white/10 shrink-0" />
-                      <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="97 123 4567" className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50 tracking-wide" />
-                      {phone && <button onClick={() => setPhone("")} className="text-muted-foreground"><XIcon className="w-3.5 h-3.5" /></button>}
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-muted-foreground pl-1">You will receive a prompt to approve the payment.</div>
+                    <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
+                      We're finalising our integration with Lipila. Airtel Money, MTN MoMo, and Zamtel Kwacha deposits will be available very soon.
+                    </p>
                   </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Amount (ZMW)</div>
-                    <div className="rounded-2xl glass p-5 flex items-center justify-center gap-2">
-                      <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} className="bg-transparent text-3xl font-semibold text-center tabular-nums focus:outline-none w-36" placeholder="0" />
-                      <span className="text-sm text-muted-foreground">ZMW</span>
-                    </div>
-                    {Number(amount) > 0 && (
-                      <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">
-                        {Math.round((Number(amount) / priceZmw) * 100_000_000).toLocaleString()} sats
-                      </div>
-                    )}
-                    <div className="mt-2 flex gap-2">
-                      {QUICK_AMOUNTS.map((v) => (
-                        <button key={v} onClick={() => setAmount(v)} className={`flex-1 py-2 rounded-xl text-xs transition ${amount === v ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}>{v}</button>
-                      ))}
-                    </div>
+                  <div className="w-full rounded-2xl bg-white/5 border border-white/8 p-4 flex flex-col gap-2 text-sm text-muted-foreground text-left">
+                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" /> Airtel Money</div>
+                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" /> MTN MoMo</div>
+                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" /> Zamtel Kwacha</div>
                   </div>
-                  <button disabled={!canConfirm()} onClick={confirm} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40">
-                    Confirm
+                  <p className="text-xs text-muted-foreground">In the meantime, use Lightning to add sats instantly.</p>
+                  <button onClick={() => setTab("lightning")} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
+                    Use Lightning instead
                   </button>
                 </motion.div>
               ) : (

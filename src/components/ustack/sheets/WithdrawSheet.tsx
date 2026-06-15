@@ -283,29 +283,19 @@ export function WithdrawSheet({
               )}
 
               {method === "momo" && (
-                <motion.div key="momo-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Provider</div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {PROVIDERS.map((p) => (
-                        <button key={p} onClick={() => setProvider(p)} className={`py-3 rounded-xl text-xs font-medium transition ${provider === p ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}>{p}</button>
-                      ))}
-                    </div>
+                <motion.div key="momo-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center text-center gap-4 py-4">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <Smartphone className="w-8 h-8 text-muted-foreground" />
                   </div>
                   <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Receiving phone number</div>
-                    <div className="rounded-2xl glass p-4 flex items-center gap-3">
-                      <div className="text-sm text-muted-foreground shrink-0">+260</div>
-                      <div className="w-px h-5 bg-white/10 shrink-0" />
-                      <input inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="97 123 4567" className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50 tracking-wide" />
-                      {phone && <button onClick={() => setPhone("")} className="text-muted-foreground"><XIcon className="w-3.5 h-3.5" /></button>}
-                    </div>
+                    <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
+                      We're finalising our Lipila integration. MoMo withdrawals (Airtel, MTN, Zamtel) will be available very soon.
+                    </p>
                   </div>
-                  <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
-                  {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
-                  {error && <p className="text-sm text-destructive text-center">{error}</p>}
-                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
-                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isEarly ? `Tap Out (${penaltyPct}% fee)` : "Continue"}
+                  <p className="text-xs text-muted-foreground">Use Lightning or On-chain to transfer your sats for now.</p>
+                  <button onClick={() => setMethod("lightning")} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
+                    Use Lightning instead
                   </button>
                 </motion.div>
               )}

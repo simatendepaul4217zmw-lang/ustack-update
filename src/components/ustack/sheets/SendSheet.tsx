@@ -78,101 +78,75 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
 
             <AnimatePresence mode="wait">
-              {method === "momo" && (
-                <motion.div
-                  key="provider"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className="overflow-hidden"
-                >
-                  <div className="mb-5">
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Provider</div>
-                    <div className="flex flex-col gap-2">
-                      {MOMO_PROVIDERS.map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setProvider(p.id)}
-                          className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left border transition ${provider === p.id ? "bg-card border-primary/50" : "bg-card/50 border-transparent glass"}`}
-                        >
-                          <div className={`w-2 h-2 rounded-full shrink-0 ${provider === p.id ? "bg-primary" : "bg-white/20"}`} />
-                          <span className="flex-1 text-sm font-medium">{p.label}</span>
-                          <span className="text-[10px] text-muted-foreground">{p.sub}</span>
-                        </button>
-                      ))}
-                    </div>
+              {method === "momo" ? (
+                <motion.div key="momo-soon" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center text-center gap-4 py-4">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <Smartphone className="w-8 h-8 text-muted-foreground" />
                   </div>
+                  <div>
+                    <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
+                      We're finalising our Lipila integration. Sending via Airtel Money, MTN MoMo, and Zamtel Kwacha will be available very soon.
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Use Lightning to send sats for now.</p>
+                  <button onClick={() => setMethod("lightning")} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
+                    Use Lightning instead
+                  </button>
+                </motion.div>
+              ) : (
+                <motion.div key="lightning-form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-0">
+                  <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Lightning address or invoice</div>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="you@wallet.btc or lnbc..."
+                    className="w-full rounded-2xl glass px-4 py-3.5 text-sm focus:outline-none placeholder:text-muted-foreground/50 mb-5"
+                  />
+
+                  <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Amount</div>
+                  <div className="rounded-2xl glass p-5 flex items-center justify-center gap-2">
+                    <input
+                      inputMode="numeric"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
+                      className="bg-transparent text-3xl font-semibold text-center tabular-nums focus:outline-none w-44"
+                      placeholder="0"
+                    />
+                    <span className="text-sm text-muted-foreground">sats</span>
+                  </div>
+                  {amtNum > 0 && (
+                    <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">
+                      {fmtValue(amtNum, priceZmw)}
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-center justify-between px-1">
+                    <span className="text-xs text-muted-foreground">
+                      Available: <span className="text-foreground font-semibold">{fmtSats(availableSats)}</span>
+                    </span>
+                    <button onClick={() => setAmount(String(availableSats))} className="text-xs font-semibold text-primary px-2.5 py-1 rounded-lg glass">
+                      Max
+                    </button>
+                  </div>
+
+                  {step === "error" && errMsg && (
+                    <div className="mt-4 rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex items-center gap-2 text-sm text-destructive">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      {errMsg}
+                    </div>
+                  )}
+
+                  <button
+                    disabled={!canContinue}
+                    onClick={handleSend}
+                    className="mt-6 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
+                  >
+                    Send
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
-
-            <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">
-              {method === "lightning" ? "Lightning address or invoice" : "Phone number"}
-            </div>
-            {method === "lightning" ? (
-              <input
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="you@wallet.btc or lnbc..."
-                className="w-full rounded-2xl glass px-4 py-3.5 text-sm focus:outline-none placeholder:text-muted-foreground/50 mb-5"
-              />
-            ) : (
-              <div className="flex gap-2 mb-5">
-                <div className="rounded-2xl glass px-4 py-3.5 text-sm text-muted-foreground shrink-0 select-none">+260</div>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 9))}
-                  placeholder="97X XXX XXX"
-                  className="flex-1 rounded-2xl glass px-4 py-3.5 text-sm focus:outline-none placeholder:text-muted-foreground/50"
-                />
-              </div>
-            )}
-
-            <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Amount</div>
-            <div className="rounded-2xl glass p-5 flex items-center justify-center gap-2">
-              <input
-                inputMode="numeric"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
-                className="bg-transparent text-3xl font-semibold text-center tabular-nums focus:outline-none w-44"
-                placeholder="0"
-              />
-              <span className="text-sm text-muted-foreground">sats</span>
-            </div>
-            {amtNum > 0 && (
-              <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">
-                {fmtValue(amtNum, priceZmw)}
-              </div>
-            )}
-            <div className="mt-2 flex items-center justify-between px-1">
-              <span className="text-xs text-muted-foreground">
-                Available: <span className="text-foreground font-semibold">{fmtSats(availableSats)}</span>
-              </span>
-              <button
-                onClick={() => setAmount(String(availableSats))}
-                className="text-xs font-semibold text-primary px-2.5 py-1 rounded-lg glass"
-              >
-                Max
-              </button>
-            </div>
-
-            {step === "error" && errMsg && (
-              <div className="mt-4 rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex items-center gap-2 text-sm text-destructive">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                {errMsg}
-              </div>
-            )}
-
-            <button
-              disabled={!canContinue}
-              onClick={handleSend}
-              className="mt-6 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
-            >
-              Send
-            </button>
           </motion.div>
         )}
 
