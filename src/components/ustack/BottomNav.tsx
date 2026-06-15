@@ -31,8 +31,8 @@ function NavBtn({ id, Icon, label, active, onClick }: { id: Tab; Icon: typeof Ho
         style={{ color: active ? "oklch(0.82 0.17 140)" : "oklch(0.68 0.015 255)" }}
       />
       <span
-        className="relative mt-0.5 font-semibold"
-        style={{ color: active ? "oklch(1 0 0)" : "oklch(0.82 0 0)" }}
+        className="relative mt-0.5"
+        style={{ color: active ? "oklch(0.95 0.02 200)" : "oklch(0.6 0.015 255)" }}
       >
         {label}
       </span>
