@@ -280,8 +280,14 @@ export const checkInvoiceStatus = createServerFn({ method: "POST" })
   });
 
 export const confirmMockInvoice = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ paymentHash: z.string() }))
+  .inputValidator(z.object({ token: z.string(), paymentHash: z.string() }))
   .handler(async ({ data }) => {
+    const payload = await verifyToken(data.token);
+    if (!payload) throw new Error("Unauthorized");
+
+    const config = getServerConfig();
+    if (!config.mockBlink) throw new Error("Mock payments are not available in production.");
+
     await confirmMockPayment(data.paymentHash);
     return { ok: true };
   });

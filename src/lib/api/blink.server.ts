@@ -154,7 +154,6 @@ export async function createLightningInvoice(
     data?: { lnInvoiceCreate?: { invoice?: { paymentRequest: string; paymentHash: string; satoshis: number; expiresAt: string }; errors?: { message: string }[] } };
     errors?: { message: string }[];
   };
-  console.error("[blink] lnInvoiceCreate raw response:", JSON.stringify(json));
   const result = json.data?.lnInvoiceCreate;
   if (!result?.invoice) {
     const msg =

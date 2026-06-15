@@ -69,7 +69,7 @@ export const createVault = createServerFn({ method: "POST" })
     const lockedUntil = data.lockMonths > 0
       ? new Date(Date.now() + data.lockMonths * 30 * 24 * 60 * 60 * 1000).toISOString()
       : null;
-    const penalty = data.vaultType === "hodl" ? 10 : 0;
+    const penalty = data.vaultType === "stack" ? 45 : 0;
 
     const vault = await queryOne<Vault>(
       `INSERT INTO vaults(user_id, name, vault_type, emoji, accent, goal_sats, goal_fiat, currency, locked_until, withdrawal_penalty_pct)
