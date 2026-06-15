@@ -84,7 +84,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
               <div className="text-sm text-muted-foreground mt-1 mb-5">Pick how you want to save.</div>
               <div className="flex flex-col gap-3">
                 <TypeCard active={type === "hodl"} onClick={() => setType("hodl")} icon={Lock} iconColor={ACCENT_COLORS.rose} title="Hodl Vault" sub="Lock sats for a set time period, e.g. 6 months. Funds are frozen until the lock expires." />
-                <TypeCard active={type === "stack"} onClick={() => setType("stack")} icon={TrendingUp} iconColor={ACCENT_COLORS.teal} title="Stack Vault" sub="Stack until you hit a target amount, e.g. 1,000,000 sats. Transfer anytime with a small penalty." />
+                <TypeCard active={type === "stack"} onClick={() => setType("stack")} icon={TrendingUp} iconColor={ACCENT_COLORS.teal} title="Stack Vault" sub="Stack until you hit a target amount, e.g. 1,000,000 sats. Transfer anytime with a 45% early penalty." />
               </div>
             </div>
           )}
@@ -220,7 +220,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
               <div className="text-sm text-muted-foreground mt-1 mb-5">Stack vault rules: simple and flexible.</div>
               <div className="flex flex-col gap-3">
                 <RuleRow title="Stack to your target" body={`Keep depositing until you hit ${goal.toLocaleString()} sats.`} />
-                <RuleRow title="Early withdrawal" body="You can withdraw anytime, but a 10% penalty applies if you haven't reached your goal." />
+                <RuleRow title="Early withdrawal" body="You can withdraw anytime, but a 45% penalty applies if you haven't reached your goal." />
                 <RuleRow title="Streak rewards" body="Stack consistently to build your streak and stay disciplined." />
               </div>
             </div>
@@ -244,7 +244,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
                 <Summary k="Target" v={`${goal.toLocaleString()} sats`} />
                 {type === "hodl"
                   ? <Summary k="Lock duration" v={useCustom ? `${effectiveLockMonths} months` : PRESET_LOCK_OPTIONS.find(o => o.months === lockMonths)?.label ?? `${lockMonths}mo`} />
-                  : <Summary k="Transfers" v="Flexible (10% early penalty)" />
+                  : <Summary k="Transfers" v="Flexible (45% early penalty)" />
                 }
               </div>
               <div className="mt-4 rounded-xl bg-white/5 px-4 py-3 flex items-start gap-2">
@@ -252,7 +252,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   {type === "hodl"
                     ? `Your sats will be fully locked for ${useCustom ? `${effectiveLockMonths} months` : PRESET_LOCK_OPTIONS.find(o => o.months === lockMonths)?.label}. This is intentional. It keeps your future self protected.`
-                    : "You can withdraw at any time. The 10% penalty is there to keep you disciplined, not to punish you."}
+                    : "You can withdraw at any time. The 45% penalty is there to keep you disciplined, not to punish you."}
                 </p>
               </div>
               {error && <p className="mt-3 text-sm text-destructive">{error}</p>}

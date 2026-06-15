@@ -12,7 +12,7 @@ const faqs = [
   },
   {
     q: "What is a Stack Vault?",
-    a: "A Stack Vault lets you save toward a target amount, e.g. 1,000,000 sats. You can withdraw anytime but a 2.5% early penalty applies to keep you on track.",
+    a: "A Stack Vault lets you save toward a target amount, e.g. 1,000,000 sats. You can withdraw anytime but a 45% early penalty applies to keep you on track.",
   },
   {
     q: "What is Price Protection?",
@@ -28,7 +28,7 @@ const faqs = [
   },
   {
     q: "How do I withdraw my sats?",
-    a: "Tap Transfer on the home screen or inside a vault. Stack Vaults allow early transfer with a 2.5% penalty. Hodl Vaults are locked until the expiry date.",
+    a: "Tap Transfer on the home screen or inside a vault. Stack Vaults allow early transfer with a 45% penalty. Hodl Vaults are locked until the expiry date.",
   },
 ];
 
