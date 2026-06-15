@@ -249,7 +249,7 @@ export function DepositSheet({
                   <div>
                     <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
                     <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
-                      We're finalising our integration with Lipila. Airtel Money, MTN MoMo, and Zamtel Kwacha deposits will be available very soon.
+                      Airtel Money, MTN MoMo, and Zamtel Kwacha deposits are coming soon. We're working on it.
                     </p>
                   </div>
                   <div className="w-full rounded-2xl bg-white/5 border border-white/8 p-4 flex flex-col gap-2 text-sm text-muted-foreground text-left">
@@ -296,13 +296,6 @@ export function DepositSheet({
                           <button onClick={() => setInvoiceData(null)} className="flex items-center gap-1 text-xs text-muted-foreground"><ArrowLeft className="w-3.5 h-3.5" /> Edit amount</button>
                           <span className="text-sm font-semibold">{fmtSats(Number(lnAmount))}</span>
                         </div>
-                        {/* Dev: mock payment hash for testing */}
-                        {invoiceData.mock && (
-                          <div className="w-full glass rounded-xl px-4 py-2.5 flex items-start gap-2">
-                            <span className="text-xs text-muted-foreground shrink-0">Mock hash:</span>
-                            <span className="font-mono text-xs text-primary break-all">{invoiceData.paymentHash}</span>
-                          </div>
-                        )}
                         <div className="w-52 h-52 rounded-2xl bg-white p-3 shadow-float flex items-center justify-center">
                           <QRCodeSVG
                             value={invoiceData.paymentRequest.toUpperCase()}

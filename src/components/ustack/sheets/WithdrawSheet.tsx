@@ -290,7 +290,7 @@ export function WithdrawSheet({
                   <div>
                     <div className="text-base font-semibold">Mobile Money — Coming Soon</div>
                     <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
-                      We're finalising our Lipila integration. MoMo withdrawals (Airtel, MTN, Zamtel) will be available very soon.
+                      Airtel Money, MTN MoMo, and Zamtel Kwacha withdrawals are coming soon. We're working on it.
                     </p>
                   </div>
                   <p className="text-xs text-muted-foreground">Use Lightning or On-chain to transfer your sats for now.</p>
