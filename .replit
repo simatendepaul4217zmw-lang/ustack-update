@@ -44,3 +44,4 @@ build = ["npm", "run", "build"]
 [userenv.shared]
 BLINK_WALLET_ID = "b19efb12-40a9-4c5c-86b9-81aa9610b68c"
 RESEND_API_KEY = "re_Wz8AEefL_5tTa1GG6FbvqrYw1okxsTmrq"
+JWT_SECRET = "2a4dd25e656518727e5446d12622d0260e4ba16e16015f059d8ccc16ff5ac74decc6ffa9f0f785e8998a15d55ed61725"
