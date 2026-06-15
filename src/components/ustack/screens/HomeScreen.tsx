@@ -135,7 +135,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
           )}
           <button
             onClick={onCreateVault}
-            className="shrink-0 w-[13rem] h-[10.5rem] rounded-2xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-card/40 transition"
+            className="shrink-0 w-[9rem] h-[10.5rem] rounded-2xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-card/40 transition"
           >
             <div className="w-8 h-8 rounded-full glass flex items-center justify-center text-lg">+</div>
             <div className="text-xs">New vault</div>
