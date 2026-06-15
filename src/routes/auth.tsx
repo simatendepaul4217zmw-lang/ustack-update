@@ -60,7 +60,7 @@ function Auth() {
       <PhoneFrame>
         <div className="h-full min-h-screen md:min-h-[860px] flex flex-col items-center justify-center gap-6 bg-background">
           <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 200, damping: 16 }}>
-            <div className="w-24 h-24 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.78 0.14 190)" }}>
+            <div className="w-24 h-24 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
               <ShieldCheck className="w-12 h-12" />
             </div>
           </motion.div>

@@ -150,7 +150,7 @@ export function WithdrawSheet({
             <p className="text-sm text-muted-foreground mb-5">Where would you like to transfer from?</p>
             <div className="flex flex-col gap-3">
               <button onClick={() => selectSource("balance")} className="flex items-center gap-4 rounded-2xl glass p-5 text-left transition active:scale-[0.98] border border-transparent hover:border-white/10">
-                <div className="w-12 h-12 rounded-xl bg-card border border-white/8 flex items-center justify-center shrink-0" style={{ color: "oklch(0.78 0.14 190)" }}><Wallet className="w-6 h-6" /></div>
+                <div className="w-12 h-12 rounded-xl bg-card border border-white/8 flex items-center justify-center shrink-0" style={{ color: "oklch(0.82 0.17 140)" }}><Wallet className="w-6 h-6" /></div>
                 <div className="flex-1">
                   <div className="text-sm font-semibold">Available Balance</div>
                   <div className="text-xs text-muted-foreground mt-0.5">Available: <span className="text-foreground font-medium">{fmtSats(availableSats)} sats</span></div>
@@ -384,7 +384,7 @@ export function WithdrawSheet({
         {/* Step 5: Done */}
         {step === "done" && (
           <motion.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center gap-4 py-4">
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 18, delay: 0.1 }} className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.78 0.14 190)" }}>
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 18, delay: 0.1 }} className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
               <CheckCircle2 className="w-10 h-10" />
             </motion.div>
             <div className="text-lg font-semibold">Transfer Initiated</div>

@@ -149,7 +149,7 @@ export function DepositSheet({
             <p className="text-sm text-muted-foreground mb-5">Where should the funds go?</p>
             <div className="flex flex-col gap-3">
               <button onClick={() => selectDest("balance")} className="flex items-center gap-4 rounded-2xl glass p-5 text-left transition active:scale-[0.98] border border-transparent hover:border-white/10">
-                <div className="w-12 h-12 rounded-xl bg-card border border-white/8 flex items-center justify-center shrink-0" style={{ color: "oklch(0.78 0.14 190)" }}>
+                <div className="w-12 h-12 rounded-xl bg-card border border-white/8 flex items-center justify-center shrink-0" style={{ color: "oklch(0.82 0.17 140)" }}>
                   <Wallet className="w-6 h-6" />
                 </div>
                 <div className="flex-1">

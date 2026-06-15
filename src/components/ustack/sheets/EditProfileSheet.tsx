@@ -8,7 +8,7 @@ import { useUpdateProfile } from "@/lib/hooks/useAppData";
 const COLORS = [
   "oklch(0.86 0.13 160)",
   "oklch(0.73 0.19 55)",
-  "oklch(0.78 0.14 190)",
+  "oklch(0.82 0.17 140)",
   "oklch(0.74 0.18 55)",
   "oklch(0.72 0.17 290)",
   "oklch(0.82 0.13 355)",

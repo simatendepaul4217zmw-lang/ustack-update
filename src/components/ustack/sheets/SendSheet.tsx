@@ -167,7 +167,7 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
               initial={{ scale: 0 }} animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 300, damping: 18, delay: 0.1 }}
               className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center"
-              style={{ color: "oklch(0.78 0.14 190)" }}
+              style={{ color: "oklch(0.82 0.17 140)" }}
             >
               <CheckCircle2 className="w-10 h-10" />
             </motion.div>

@@ -86,7 +86,7 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
           <div className="mt-4 flex flex-col gap-2">
             <div className="text-xs uppercase tracking-widest text-muted-foreground px-1 mb-1">Contact</div>
             <a href="https://wa.me/260777693802" target="_blank" rel="noopener noreferrer" className="rounded-2xl glass p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.78 0.14 190)" }}>
+              <div className="w-10 h-10 rounded-xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
                 <MessageCircle className="w-5 h-5" />
               </div>
               <div className="flex-1 text-left">
@@ -122,7 +122,7 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
 
           <div className="flex flex-col gap-2">
             {[
-              { icon: Shield, title: "Non-custodial", body: "Your keys. Your coins. We never hold your funds.", color: "oklch(0.78 0.14 190)" },
+              { icon: Shield, title: "Non-custodial", body: "Your keys. Your coins. We never hold your funds.", color: "oklch(0.82 0.17 140)" },
               { icon: Lock, title: "Privacy first", body: "Minimal data collection. No selling your information.", color: "oklch(0.86 0.13 160)" },
               { icon: Zap, title: "Lightning fast", body: "Instant Lightning Network deposits and withdrawals.", color: "oklch(0.74 0.18 55)" },
               { icon: Info, title: "Open building", body: "Made in Zambia. Africa-native Bitcoin savings.", color: "oklch(0.73 0.19 55)" },

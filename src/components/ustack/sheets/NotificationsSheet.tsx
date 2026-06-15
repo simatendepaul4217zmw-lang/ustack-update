@@ -8,7 +8,7 @@ const iconMap = {
   summary: Sparkles, warning: AlertTriangle,
 } as const;
 const colorMap: Record<string, string> = {
-  milestone: "oklch(0.86 0.13 160)", deposit: "oklch(0.73 0.19 55)", protection: "oklch(0.78 0.14 190)",
+  milestone: "oklch(0.86 0.13 160)", deposit: "oklch(0.73 0.19 55)", protection: "oklch(0.82 0.17 140)",
   summary: "oklch(0.74 0.18 55)", warning: "oklch(0.73 0.19 55)",
 };
 

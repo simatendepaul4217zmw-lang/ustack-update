@@ -40,30 +40,30 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
       </div>
 
       {/* Price Protection — always active platform feature */}
-      <div className="rounded-3xl overflow-hidden" style={{ background: "linear-gradient(135deg, oklch(0.22 0.06 250) 0%, oklch(0.18 0.04 250) 100%)", border: "1px solid oklch(0.78 0.14 190 / 0.2)" }}>
+      <div className="rounded-3xl overflow-hidden" style={{ background: "linear-gradient(135deg, oklch(0.22 0.06 250) 0%, oklch(0.18 0.04 250) 100%)", border: "1px solid oklch(0.82 0.17 140 / 0.2)" }}>
         <div className="p-5">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "oklch(0.78 0.14 190 / 0.15)" }}>
-                <ShieldCheck className="w-5 h-5" style={{ color: "oklch(0.82 0.13 190)" }} />
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "oklch(0.82 0.17 140 / 0.15)" }}>
+                <ShieldCheck className="w-5 h-5" style={{ color: "oklch(0.82 0.17 140)" }} />
               </div>
               <div>
                 <div className="text-xs uppercase tracking-widest text-muted-foreground">Platform Feature</div>
                 <div className="text-base font-semibold mt-0.5">Price Protection</div>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "oklch(0.78 0.14 190 / 0.15)" }}>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "oklch(0.82 0.17 140 / 0.15)" }}>
               <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "oklch(0.82 0.13 190)" }} />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.13 190)" }} />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "oklch(0.82 0.17 140)" }} />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.17 140)" }} />
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "oklch(0.82 0.13 190)" }}>Always On</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "oklch(0.82 0.17 140)" }}>Always On</span>
             </div>
           </div>
 
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
             UStack automatically shields every user's stacks  when Bitcoin drops by{" "}
-            <span className="font-semibold" style={{ color: "oklch(0.82 0.13 190)" }}>2%</span>{" "}
+            <span className="font-semibold" style={{ color: "oklch(0.82 0.17 140)" }}>2%</span>{" "}
             or more.
           </p>
 
@@ -73,8 +73,8 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
               { icon: ShieldCheck, label: "2% Threshold", sub: "Fixed for all users" },
               { icon: Lock, label: "Automatic", sub: "Always watching" },
             ].map(({ icon: Icon, label, sub }) => (
-              <div key={label} className="rounded-xl p-3 text-center" style={{ background: "oklch(0.78 0.14 190 / 0.08)" }}>
-                <Icon className="w-4 h-4 mx-auto mb-1.5" style={{ color: "oklch(0.82 0.13 190)" }} />
+              <div key={label} className="rounded-xl p-3 text-center" style={{ background: "oklch(0.82 0.17 140 / 0.08)" }}>
+                <Icon className="w-4 h-4 mx-auto mb-1.5" style={{ color: "oklch(0.82 0.17 140)" }} />
                 <div className="text-[10px] font-semibold text-foreground">{label}</div>
                 <div className="text-[9px] text-muted-foreground mt-0.5">{sub}</div>
               </div>

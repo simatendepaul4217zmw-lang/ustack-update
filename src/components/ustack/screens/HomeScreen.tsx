@@ -95,15 +95,15 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
 
         <div className="relative mt-3 flex items-center justify-between pt-3 border-t border-white/8">
           <div className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5" style={{ color: "oklch(0.82 0.13 190)" }} />
+            <ShieldCheck className="w-3.5 h-3.5" style={{ color: "oklch(0.82 0.17 140)" }} />
             <span className="text-[10px] text-muted-foreground">Price Protection</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: "oklch(0.82 0.13 190)" }} />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.13 190)" }} />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: "oklch(0.82 0.17 140)" }} />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.17 140)" }} />
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "oklch(0.82 0.13 190)" }}>Active</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "oklch(0.82 0.17 140)" }}>Active</span>
           </div>
         </div>
       </motion.div>

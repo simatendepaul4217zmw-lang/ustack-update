@@ -28,7 +28,7 @@ function NavBtn({ id, Icon, label, active, onClick }: { id: Tab; Icon: typeof Ho
       )}
       <Icon
         className="relative h-5 w-5"
-        style={{ color: active ? "oklch(0.82 0.13 190)" : "oklch(0.68 0.015 255)" }}
+        style={{ color: active ? "oklch(0.82 0.17 140)" : "oklch(0.68 0.015 255)" }}
       />
       <span
         className="relative mt-0.5"
