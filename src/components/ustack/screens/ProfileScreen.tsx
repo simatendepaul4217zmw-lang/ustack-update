@@ -40,41 +40,45 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
       </div>
 
       {/* Price Protection — always active platform feature */}
-      <div className="rounded-3xl overflow-hidden" style={{ background: "linear-gradient(135deg, oklch(0.22 0.06 250) 0%, oklch(0.18 0.04 250) 100%)", border: "1px solid oklch(0.82 0.17 140 / 0.2)" }}>
-        <div className="p-5">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "oklch(0.82 0.17 140 / 0.15)" }}>
+      <div className="rounded-2xl overflow-hidden border" style={{ background: "oklch(0.15 0.02 160 / 0.6)", borderColor: "oklch(0.82 0.17 140 / 0.25)" }}>
+        {/* Green top stripe */}
+        <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, oklch(0.82 0.17 140 / 0.6), oklch(0.82 0.17 140 / 0.15))" }} />
+
+        <div className="p-4 flex flex-col gap-3.5">
+          {/* Header row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "oklch(0.82 0.17 140 / 0.12)", border: "1px solid oklch(0.82 0.17 140 / 0.25)" }}>
                 <ShieldCheck className="w-5 h-5" style={{ color: "oklch(0.82 0.17 140)" }} />
               </div>
               <div>
-                <div className="text-xs uppercase tracking-widest text-muted-foreground">Platform Feature</div>
-                <div className="text-base font-semibold mt-0.5">Price Protection</div>
+                <div className="text-sm font-semibold">Price Protection</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">Platform-wide · all users</div>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ background: "oklch(0.82 0.17 140 / 0.15)" }}>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border" style={{ background: "oklch(0.82 0.17 140 / 0.1)", borderColor: "oklch(0.82 0.17 140 / 0.3)" }}>
               <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: "oklch(0.82 0.17 140)" }} />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: "oklch(0.82 0.17 140)" }} />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.17 140)" }} />
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "oklch(0.82 0.17 140)" }}>Always On</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: "oklch(0.82 0.17 140)" }}>Active</span>
             </div>
           </div>
 
-          <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            UStack automatically shields every user's stacks  when Bitcoin drops by{" "}
-            <span className="font-semibold" style={{ color: "oklch(0.82 0.17 140)" }}>2%</span>{" "}
-            or more.
+          {/* Description */}
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            When BTC drops <span className="font-semibold" style={{ color: "oklch(0.82 0.17 140)" }}>2%</span> or more, UStack automatically shields your savings. No setup needed.
           </p>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-2">
             {[
-              { icon: Zap, label: "Instant", sub: "Real-time alerts" },
-              { icon: ShieldCheck, label: "2% Threshold", sub: "Fixed for all users" },
-              { icon: Lock, label: "Automatic", sub: "Always watching" },
+              { icon: Zap, label: "Instant", sub: "Real-time" },
+              { icon: ShieldCheck, label: "2% Drop", sub: "Trigger" },
+              { icon: Lock, label: "Auto", sub: "No action needed" },
             ].map(({ icon: Icon, label, sub }) => (
-              <div key={label} className="rounded-xl p-3 text-center" style={{ background: "oklch(0.82 0.17 140 / 0.08)" }}>
-                <Icon className="w-4 h-4 mx-auto mb-1.5" style={{ color: "oklch(0.82 0.17 140)" }} />
+              <div key={label} className="rounded-xl p-2.5 text-center" style={{ background: "oklch(0.82 0.17 140 / 0.07)" }}>
+                <Icon className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: "oklch(0.82 0.17 140)" }} />
                 <div className="text-[10px] font-semibold text-foreground">{label}</div>
                 <div className="text-[9px] text-muted-foreground mt-0.5">{sub}</div>
               </div>
