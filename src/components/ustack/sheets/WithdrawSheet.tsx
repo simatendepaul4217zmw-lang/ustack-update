@@ -3,15 +3,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Zap, Smartphone, AlertTriangle, Lock, TrendingUp,
   ChevronRight, ArrowLeft, CheckCircle2, Wallet, LayoutGrid,
-  ClipboardPaste, X as XIcon, Loader2, Link2
+  ClipboardPaste, X as XIcon, Loader2, Link2, ShieldCheck
 } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { fmtSats, type Vault } from "@/lib/ustack-data";
 import { useCurrency } from "@/lib/currency-context";
-import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee, useBtcPrice } from "@/lib/hooks/useAppData";
+import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee, useBtcPrice, useVerifyPin, useSecurityStatus } from "@/lib/hooks/useAppData";
 import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
+import { PinPad } from "../PinPad";
 
-type Step = "source" | "vault" | "locked" | "amount" | "warning" | "done";
+type Step = "source" | "vault" | "locked" | "amount" | "warning" | "auth" | "done";
 type Source = "balance" | "vault";
 type Method = "lightning" | "momo" | "onchain";
 
@@ -35,6 +36,10 @@ export function WithdrawSheet({
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
 
+  const [authPin, setAuthPin] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [pendingAfterAuth, setPendingAfterAuth] = useState<"withdraw" | "warning" | null>(null);
+
   const { data: wallet } = useWallet();
   const { data: vaults = [] } = useVaults();
   const { data: btcPrice } = useBtcPrice();
@@ -44,6 +49,8 @@ export function WithdrawSheet({
   const sendPayment = useSendPayment();
   const sendOnChain = useSendOnChainPayment();
   const feeQuery = useEstimateOnChainFee(onchainAddress, Number(amount) || 0);
+  const { data: security } = useSecurityStatus();
+  const verifyPin = useVerifyPin();
 
   const availableSats = wallet?.availableSats ?? 0;
 
@@ -61,6 +68,31 @@ export function WithdrawSheet({
   const resetAll = () => {
     setStep("source"); setSource("balance"); setVault(null);
     setAddress(""); setOnchainAddress(""); setPhone(""); setAmount(""); setError("");
+    setAuthPin(""); setAuthError(""); setPendingAfterAuth(null);
+  };
+
+  const requireAuth = (after: "withdraw" | "warning") => {
+    if (security?.pinEnabled || security?.biometricEnabled) {
+      setPendingAfterAuth(after);
+      setAuthPin(""); setAuthError("");
+      setStep("auth");
+    } else if (after === "warning") {
+      setStep("warning");
+    } else {
+      handleWithdraw();
+    }
+  };
+
+  const handleAuthComplete = async (pin: string) => {
+    setAuthError("");
+    try {
+      await verifyPin.mutateAsync({ pin });
+      if (pendingAfterAuth === "warning") setStep("warning");
+      else handleWithdraw();
+    } catch (e: unknown) {
+      setAuthError(e instanceof Error ? e.message : "Incorrect PIN");
+      setAuthPin("");
+    }
   };
 
   const reset = () => { resetAll(); onClose(); };
@@ -137,7 +169,7 @@ export function WithdrawSheet({
   const titleMap: Record<Step, string | undefined> = {
     source: "Transfer", vault: "Select Vault", locked: vault?.name,
     amount: vaultContext ? vaultContext.name : (source === "balance" ? "Available Balance" : vault?.name),
-    warning: "Early Transfer", done: "Transfer Sent",
+    warning: "Early Transfer", auth: "Authorize Transfer", done: "Transfer Sent",
   };
 
   return (
@@ -276,7 +308,7 @@ export function WithdrawSheet({
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
                   {error && <p className="text-sm text-destructive text-center">{error}</p>}
-                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
+                  <button disabled={!canContinue() || isPending} onClick={() => requireAuth(isEarly ? "warning" : "withdraw")} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
                     {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isEarly ? `Tap Out (${penaltyPct}% fee)` : "Continue"}
                   </button>
                 </motion.div>
@@ -340,12 +372,24 @@ export function WithdrawSheet({
                   <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
                   {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
                   {error && <p className="text-sm text-destructive text-center">{error}</p>}
-                  <button disabled={!canContinue() || isPending} onClick={() => isEarly ? setStep("warning") : handleWithdraw()} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
+                  <button disabled={!canContinue() || isPending} onClick={() => requireAuth(isEarly ? "warning" : "withdraw")} className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}>
                     {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isEarly ? `Tap Out (${penaltyPct}% fee)` : "Continue"}
                   </button>
                 </motion.div>
               )}
             </AnimatePresence>
+          </motion.div>
+        )}
+
+        {/* Auth step: PIN verification */}
+        {step === "auth" && (
+          <motion.div key="auth" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-4 pt-2">
+            <button onClick={() => setStep("amount")} className="flex items-center gap-1 text-xs text-muted-foreground self-start mb-1"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
+            <div className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
+              <ShieldCheck className="w-7 h-7" />
+            </div>
+            <p className="text-sm text-muted-foreground text-center">Enter your PIN to authorize this transfer</p>
+            <PinPad pin={authPin} onChange={setAuthPin} onComplete={handleAuthComplete} error={authError} disabled={verifyPin.isPending} />
           </motion.div>
         )}
 

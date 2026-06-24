@@ -18,15 +18,42 @@ const SERVER_ONLY_PACKAGES = [
   "postgres-date",
   "postgres-interval",
   "jose",
+  "bcryptjs",
   "crypto",
+];
+
+// .server.ts file paths that must never reach the client bundle
+const SERVER_ONLY_FILES = [
+  "/src/lib/security.server",
 ];
 
 function serverOnlyShimPlugin(): Plugin {
   const STUB = `
 const noop = () => { throw new Error("Server-only module imported on client"); };
-export default new Proxy({}, { get: () => noop });
+const proxyDefault = new Proxy({}, { get: () => noop });
+export default proxyDefault;
+// pg
 export const Pool = noop;
 export const Client = noop;
+// jose
+export const SignJWT = noop;
+export const jwtVerify = noop;
+export const jwtDecrypt = noop;
+export const decodeJwt = noop;
+export const importJWK = noop;
+export const createRemoteJWKSet = noop;
+// bcryptjs
+export const hash = noop;
+export const compare = noop;
+export const hashSync = noop;
+export const compareSync = noop;
+export const genSalt = noop;
+export const genSaltSync = noop;
+// security.server re-exports
+export const signTxAuthToken = noop;
+export const verifyTxAuthToken = noop;
+export const hashPin = noop;
+export const verifyPinHash = noop;
 `;
   return {
     name: "server-only-shim",
@@ -35,6 +62,9 @@ export const Client = noop;
       // opts.ssr is true when building for the server — skip shim then
       if (opts?.ssr) return null;
       if (SERVER_ONLY_PACKAGES.some((pkg) => id === pkg || id.startsWith(pkg + "/"))) {
+        return "\0server-only-shim:" + id;
+      }
+      if (SERVER_ONLY_FILES.some((f) => id.endsWith(f) || id.includes(f))) {
         return "\0server-only-shim:" + id;
       }
       return null;

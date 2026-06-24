@@ -15,6 +15,7 @@ import { DepositSheet } from "./sheets/DepositSheet";
 import { WithdrawSheet } from "./sheets/WithdrawSheet";
 import { VaultDetailSheet } from "./sheets/VaultDetailSheet";
 import { SettingsSheet } from "./sheets/SettingsSheet";
+import { SecuritySetupSheet } from "./sheets/SecuritySetupSheet";
 import { HelpSheet } from "./sheets/HelpSheet";
 import { EditProfileSheet } from "./sheets/EditProfileSheet";
 import { useAuth } from "@/lib/context/auth-context";
@@ -31,6 +32,7 @@ export type SheetKind =
   | "withdraw"
   | "vaultDetail"
   | "settings"
+  | "security"
   | "help"
   | "editProfile";
 
@@ -43,6 +45,7 @@ export function AppShell() {
   const [activeVault, setActiveVault] = useState<Vault | null>(null);
   const [depositVault, setDepositVault] = useState<Vault | null>(null);
   const [withdrawVault, setWithdrawVault] = useState<Vault | null>(null);
+  const [securityStartAt, setSecurityStartAt] = useState<"pin" | "biometric">("pin");
 
   const { data: btcPrice } = useBtcPrice();
 
@@ -156,7 +159,19 @@ export function AppShell() {
           onDeposit={() => { setSheet(null); setTimeout(() => openDeposit(activeVault!), 120); }}
           onWithdraw={() => { setSheet(null); setTimeout(() => openWithdraw(activeVault!), 120); }}
         />
-        <SettingsSheet open={sheet === "settings"} onClose={() => setSheet(null)} />
+        <SettingsSheet
+          open={sheet === "settings"}
+          onClose={() => setSheet(null)}
+          onOpenSecurity={(startAt = "pin") => {
+            setSecurityStartAt(startAt);
+            setSheet("security");
+          }}
+        />
+        <SecuritySetupSheet
+          open={sheet === "security"}
+          onClose={() => setSheet("settings")}
+          startAt={securityStartAt}
+        />
         <HelpSheet open={sheet === "help"} onClose={() => setSheet(null)} />
         <EditProfileSheet open={sheet === "editProfile"} onClose={() => setSheet(null)} />
       </div>

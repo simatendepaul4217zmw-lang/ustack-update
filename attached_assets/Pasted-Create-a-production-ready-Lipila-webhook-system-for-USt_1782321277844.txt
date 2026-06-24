@@ -1,0 +1,228 @@
+Create a production-ready Lipila webhook system for UStack.
+
+OVERVIEW
+
+UStack integrates with Lipila for:
+
+* Mobile Money Deposits
+* Mobile Money Withdrawals
+
+Create a webhook endpoint that receives transaction updates from Lipila and automatically updates user balances.
+
+WEBHOOK ENDPOINT
+
+Create:
+
+POST /api/webhooks/lipila
+
+Requirements:
+
+* Accept POST requests
+* Return HTTP 200 immediately after successful processing
+* Log incoming webhook events
+* Handle duplicate webhook events safely
+
+WEBHOOK PROCESSING FLOW
+
+When a webhook is received:
+
+1. Verify request authenticity (signature verification if Lipila provides one)
+2. Parse payload
+3. Extract transaction reference
+4. Find matching transaction in database
+5. Check if transaction already processed
+6. If already processed, ignore
+7. If not processed:
+
+   * Update transaction status
+   * Credit or debit user balance
+   * Create activity log
+   * Create notification
+8. Return success response
+
+DEPOSIT WEBHOOKS
+
+When payment status is:
+
+SUCCESS
+COMPLETED
+PAID
+
+Process:
+
+Find transaction
+↓
+Verify amount matches expected amount
+↓
+Mark transaction completed
+↓
+Credit user wallet
+↓
+Create activity log
+↓
+Create notification
+
+Example notification:
+
+"Your deposit of K100 has been successfully credited."
+
+WITHDRAWAL WEBHOOKS
+
+When withdrawal status is:
+
+SUCCESS
+COMPLETED
+
+Process:
+
+Find withdrawal transaction
+↓
+Mark completed
+↓
+Create activity log
+↓
+Create notification
+
+Example notification:
+
+"Your withdrawal has been completed."
+
+FAILED PAYMENTS
+
+When status is:
+
+FAILED
+REJECTED
+CANCELLED
+EXPIRED
+
+Process:
+
+Mark transaction failed
+
+Do not credit user.
+
+Create notification.
+
+DUPLICATE PROTECTION
+
+Prevent double-crediting.
+
+Before processing:
+
+Check:
+
+transaction.status
+
+If already completed:
+
+Ignore webhook.
+
+Log duplicate event.
+
+DATABASE INTEGRATION
+
+Use existing tables:
+
+transactions
+wallets
+vaults
+notifications
+activity_logs
+
+Update balances using database transactions.
+
+All balance changes must be atomic.
+
+ACTIVITY LOGS
+
+Create entries:
+
+Deposit Received
+
+Deposit Completed
+
+Withdrawal Completed
+
+Payment Failed
+
+Webhook Received
+
+Duplicate Webhook Ignored
+
+NOTIFICATIONS
+
+Create user notifications for:
+
+Successful deposits
+
+Successful withdrawals
+
+Failed payments
+
+Failed withdrawals
+
+LOGGING
+
+Log:
+
+Timestamp
+
+Transaction reference
+
+Amount
+
+Status
+
+User ID
+
+Webhook payload
+
+Store logs for debugging.
+
+SECURITY
+
+Verify webhook authenticity.
+
+Reject malformed payloads.
+
+Reject unknown transaction references.
+
+Prevent replay attacks.
+
+Prevent duplicate credits.
+
+Never trust frontend confirmations.
+
+Only trust verified Lipila webhooks.
+
+CONFIGURATION
+
+Environment Variables:
+
+LIPILA_API_KEY
+
+LIPILA_WEBHOOK_SECRET
+
+LIPILA_BASE_URL
+
+OUTPUT
+
+Generate:
+
+* Webhook controller
+* Webhook service
+* Database integration
+* Transaction processing logic
+* Notification integration
+* Activity log integration
+* Error handling
+* Security validation
+
+At the end provide the final production webhook URL.
+
+Example:
+
+https://ustack.site/api/webhooks/lipila
+
+and ensure the endpoint is ready to be registered in the Lipila dashboard.

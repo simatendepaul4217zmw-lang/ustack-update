@@ -1,19 +1,18 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Fingerprint, Bell, Trash2, ChevronRight, Check, ArrowLeft, Sun, Moon, Loader2 } from "lucide-react";
+import { Fingerprint, Bell, Trash2, ChevronRight, Sun, Moon, Loader2, ShieldCheck, ShieldOff, ShieldAlert } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { useTheme } from "@/lib/theme-context";
 import { useCurrency, type Currency } from "@/lib/currency-context";
+import { useSecurityStatus, useSetBiometric } from "@/lib/hooks/useAppData";
 
-type Section = "main" | "pin" | "notifications";
+type Section = "main" | "notifications";
 
 const LS = {
   get: (k: string, fallback: string) => { try { return localStorage.getItem(k) ?? fallback; } catch { return fallback; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch {} },
-  remove: (k: string) => { try { localStorage.removeItem(k); } catch {} },
 };
 
-const PIN_KEY = "ustack_pin";
 const NOTIF_KEYS = {
   deposit: "ustack_notif_deposit",
   milestone: "ustack_notif_milestone",
@@ -21,14 +20,20 @@ const NOTIF_KEYS = {
   protection: "ustack_notif_protection",
   weekly: "ustack_notif_weekly",
 };
-const BIOMETRICS_KEY = "ustack_biometrics";
-const CURRENCY_KEY = "ustack_currency";
 
-export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SettingsSheet({
+  open,
+  onClose,
+  onOpenSecurity,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onOpenSecurity?: (startAt?: "pin" | "biometric") => void;
+}) {
   const { theme, setTheme } = useTheme();
   const [section, setSection] = useState<Section>("main");
+  const [clearing, setClearing] = useState(false);
 
-  const [biometrics, setBiometrics] = useState(() => LS.get(BIOMETRICS_KEY, "true") === "true");
   const [notifDeposit, setNotifDeposit] = useState(() => LS.get(NOTIF_KEYS.deposit, "true") === "true");
   const [notifMilestone, setNotifMilestone] = useState(() => LS.get(NOTIF_KEYS.milestone, "true") === "true");
   const [notifStreak, setNotifStreak] = useState(() => LS.get(NOTIF_KEYS.streak, "true") === "true");
@@ -36,23 +41,22 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
   const [notifWeekly, setNotifWeekly] = useState(() => LS.get(NOTIF_KEYS.weekly, "false") === "true");
   const { currency, setCurrency: setGlobalCurrency } = useCurrency();
 
-  const [pinStep, setPinStep] = useState<"current" | "new" | "confirm" | "done">("current");
-  const [pinEntry, setPinEntry] = useState("");
-  const [newPinEntry, setNewPinEntry] = useState("");
-  const [pinError, setPinError] = useState("");
-  const [clearing, setClearing] = useState(false);
+  const { data: security, isLoading: secLoading } = useSecurityStatus();
+  const setBiometric = useSetBiometric();
 
-  const hasPin = LS.get(PIN_KEY, "") !== "";
+  useEffect(() => { if (!open) setSection("main"); }, [open]);
 
-  useEffect(() => {
-    if (open) {
-      setPinStep(hasPin ? "current" : "new");
-      setPinEntry(""); setNewPinEntry(""); setPinError("");
+  const handleBiometricsChange = async (v: boolean) => {
+    if (v) {
+      if (!security?.pinEnabled) {
+        onOpenSecurity?.("pin");
+      } else {
+        onOpenSecurity?.("biometric");
+      }
+      return;
     }
-  }, [open]);
-
-  const handleBiometricsChange = (v: boolean) => { setBiometrics(v); LS.set(BIOMETRICS_KEY, String(v)); };
-  const handleCurrencyChange = (c: Currency) => { setGlobalCurrency(c); };
+    try { await setBiometric.mutateAsync({ enabled: false }); } catch {}
+  };
 
   const notifChange = (key: keyof typeof NOTIF_KEYS, setter: (v: boolean) => void) => (v: boolean) => {
     setter(v); LS.set(NOTIF_KEYS[key], String(v));
@@ -60,9 +64,9 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
 
   const clearCache = async () => {
     setClearing(true);
-    const keep = ["ustack-theme", "ustack_token", "ustack_pin", BIOMETRICS_KEY, CURRENCY_KEY, ...Object.values(NOTIF_KEYS)];
-    const allKeys: string[] = [];
+    const keep = ["ustack-theme", "ustack_token", ...Object.values(NOTIF_KEYS)];
     try {
+      const allKeys: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && !keep.includes(k)) allKeys.push(k);
@@ -74,64 +78,52 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
     window.location.reload();
   };
 
-  const close = () => {
-    setSection("main");
-    setPinStep(hasPin ? "current" : "new");
-    setPinEntry(""); setNewPinEntry(""); setPinError("");
-    onClose();
-  };
-  const back = () => {
-    setSection("main");
-    setPinStep(hasPin ? "current" : "new");
-    setPinEntry(""); setNewPinEntry(""); setPinError("");
-  };
+  const close = () => { setSection("main"); onClose(); };
 
-  const handlePinDigit = (k: number | string) => {
-    if (k === "⌫") { setPinEntry((p) => p.slice(0, -1)); return; }
-    if (k === "") return;
-    const next = pinEntry + k;
-    if (next.length > 6) return;
-    setPinEntry(next);
-
-    if (next.length === 6) {
-      setTimeout(() => {
-        if (pinStep === "current") {
-          if (next !== LS.get(PIN_KEY, "")) {
-            setPinError("Incorrect PIN"); setPinEntry(""); return;
-          }
-          setPinError(""); setPinEntry(""); setPinStep("new");
-        } else if (pinStep === "new") {
-          setNewPinEntry(next); setPinEntry(""); setPinStep("confirm");
-        } else if (pinStep === "confirm") {
-          if (next !== newPinEntry) {
-            setPinError("PINs don't match"); setPinEntry(""); setPinStep("new"); setNewPinEntry(""); return;
-          }
-          LS.set(PIN_KEY, next);
-          setPinStep("done"); setPinEntry("");
-        }
-      }, 280);
-    }
-  };
-
-  const pinLabels: Record<string, string> = {
-    current: "Enter current PIN",
-    new: hasPin ? "Enter new PIN" : "Create a 6-digit PIN",
-    confirm: "Confirm new PIN",
-  };
+  const SecIcon = !security?.pinEnabled ? ShieldOff : ShieldCheck;
+  const secLabel = !security?.pinEnabled
+    ? "Not configured"
+    : security.biometricEnabled
+    ? "PIN + Fingerprint"
+    : "PIN protected";
+  const secColor = security?.pinEnabled ? "text-primary" : "text-muted-foreground";
 
   return (
-    <Sheet open={open} onClose={close} title={section === "main" ? "Settings" : section === "pin" ? "Change PIN" : "Notifications"}>
+    <Sheet open={open} onClose={close} title={section === "main" ? "Settings" : "Notifications"}>
       {section !== "main" && (
-        <button onClick={back} className="flex items-center gap-1.5 text-xs text-muted-foreground mb-5 -mt-1">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back
+        <button onClick={() => setSection("main")} className="flex items-center gap-1.5 text-xs text-muted-foreground mb-5 -mt-1">
+          ← Back
         </button>
       )}
 
       {section === "main" && (
         <div className="flex flex-col gap-5">
+
           <Group title="Security">
-            <Row icon={Fingerprint} label="Biometrics" right={<Toggle on={biometrics} onChange={handleBiometricsChange} />} />
-            <Row icon={Fingerprint} label={hasPin ? "Change PIN" : "Set up PIN"} right={<ChevronRight className="w-4 h-4 text-muted-foreground" />} onClick={() => { setPinStep(hasPin ? "current" : "new"); setSection("pin"); }} />
+            {!secLoading && (
+              <div className="px-4 py-3 flex items-center gap-3 border-b border-white/5">
+                <SecIcon className={`w-4 h-4 shrink-0 ${secColor}`} />
+                <span className={`text-sm flex-1 ${secColor}`}>{secLabel}</span>
+                {security?.locked && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Locked</span>
+                )}
+              </div>
+            )}
+            <Row
+              icon={ShieldAlert}
+              label={security?.pinEnabled ? "Change PIN" : "Set up 4-digit PIN"}
+              right={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
+              onClick={() => onOpenSecurity?.("pin")}
+            />
+            <Row
+              icon={Fingerprint}
+              label="Fingerprint unlock"
+              right={
+                setBiometric.isPending
+                  ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  : <Toggle on={security?.biometricEnabled ?? false} onChange={handleBiometricsChange} />
+              }
+            />
           </Group>
 
           <Group title="Notifications">
@@ -156,8 +148,8 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
             <div className="px-4 py-3">
               <div className="text-xs text-muted-foreground mb-2">Display currency</div>
               <div className="flex gap-2">
-                {["ZMW", "USD", "BTC"].map((c) => (
-                  <button key={c} onClick={() => handleCurrencyChange(c as import("@/lib/currency-context").Currency)} className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${currency === c ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}>
+                {(["ZMW", "USD", "BTC"] as Currency[]).map((c) => (
+                  <button key={c} onClick={() => setGlobalCurrency(c)} className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition ${currency === c ? "bg-primary text-primary-foreground" : "glass text-muted-foreground"}`}>
                     {c}
                   </button>
                 ))}
@@ -166,11 +158,7 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
           </Group>
 
           <Group title="Data">
-            <button
-              onClick={clearCache}
-              disabled={clearing}
-              className="w-full flex items-center gap-3 px-4 py-3.5 text-left border-b border-white/5 last:border-0"
-            >
+            <button onClick={clearCache} disabled={clearing} className="w-full flex items-center gap-3 px-4 py-3.5 text-left border-b border-white/5 last:border-0">
               {clearing ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin shrink-0" /> : <Trash2 className="w-4 h-4 text-muted-foreground shrink-0" />}
               <span className="flex-1 text-sm">{clearing ? "Clearing…" : "Clear app cache"}</span>
               <span className="text-xs text-muted-foreground">Reloads app</span>
@@ -178,49 +166,6 @@ export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () =>
           </Group>
 
           <p className="text-center text-xs text-muted-foreground mt-2">ustack v1.0.0 · built for zambia</p>
-        </div>
-      )}
-
-      {section === "pin" && (
-        <div className="flex flex-col items-center">
-          {pinStep !== "done" ? (
-            <>
-              <p className="text-sm text-muted-foreground mb-8 text-center">{pinLabels[pinStep]}</p>
-              <div className="flex gap-4 mb-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <motion.div
-                    key={i}
-                    animate={{ scale: pinEntry.length === i + 1 ? [1, 1.3, 1] : 1, background: i < pinEntry.length ? "oklch(0.73 0.19 55)" : "oklch(0.3 0.01 260)" }}
-                    transition={{ duration: 0.18 }}
-                    className="w-4 h-4 rounded-full"
-                  />
-                ))}
-              </div>
-              {pinError && <p className="text-xs text-destructive mb-4">{pinError}</p>}
-              {!pinError && <div className="mb-7" />}
-              <div className="grid grid-cols-3 gap-3 w-full px-2">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "⌫"].map((k, i) => (
-                  <button
-                    key={i}
-                    disabled={k === ""}
-                    onClick={() => handlePinDigit(k)}
-                    className={`h-14 rounded-2xl text-lg font-semibold flex items-center justify-center transition active:scale-95 ${k === "" ? "invisible" : "glass"}`}
-                  >
-                    {k}
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="py-10 flex flex-col items-center gap-4">
-              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring" }} className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.86 0.13 160)" }}>
-                <Check className="w-10 h-10" strokeWidth={3} />
-              </motion.div>
-              <div className="text-lg font-semibold">PIN {hasPin ? "updated" : "created"}</div>
-              <p className="text-sm text-muted-foreground text-center">Your PIN is saved on this device.</p>
-              <button onClick={close} className="mt-4 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">Done</button>
-            </div>
-          )}
         </div>
       )}
 
@@ -253,7 +198,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-function Row({ icon: Icon, label, right, onClick }: { icon: typeof Bell; label: string; right?: React.ReactNode; onClick?: () => void }) {
+function Row({ icon: Icon, label, right, onClick }: { icon: React.ElementType; label: string; right?: React.ReactNode; onClick?: () => void }) {
   return (
     <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3.5 border-b border-white/5 last:border-0 text-left">
       <Icon className="w-4 h-4 text-muted-foreground shrink-0" />

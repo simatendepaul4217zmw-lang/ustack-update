@@ -7,6 +7,7 @@ import { getBtcPrice } from "@/lib/api/price.functions";
 import { createInvoice, sendPayment, sendOnChainPayment, estimateOnChainFee, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus } from "@/lib/api/lightning.functions";
 import { updateProfile } from "@/lib/api/auth.functions";
 import { getPriceProtection, updatePriceProtection } from "@/lib/api/priceprotection.functions";
+import { getSecurityStatus, setupPin, changePin, verifyPin, setBiometric } from "@/lib/api/security.functions";
 
 // ── Wallet ────────────────────────────────────────────────────────────────────
 
@@ -246,5 +247,51 @@ export function useUpdatePriceProtection() {
     mutationFn: (vars: { enabled: boolean; thresholdPct: number }) =>
       updatePriceProtection({ data: { ...vars, token: token! } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["priceProtection"] }),
+  });
+}
+
+// ── Security ──────────────────────────────────────────────────────────────────
+
+export function useSecurityStatus() {
+  const { token, isAuthenticated } = useAuth();
+  return useQuery({
+    queryKey: ["security", token],
+    queryFn: () => getSecurityStatus({ data: { token: token! } }),
+    enabled: !!token && isAuthenticated,
+    staleTime: 30_000,
+  });
+}
+
+export function useSetupPin() {
+  const { token } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { pin: string }) => setupPin({ data: { token: token!, ...vars } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+  });
+}
+
+export function useChangePin() {
+  const { token } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { currentPin: string; newPin: string }) => changePin({ data: { token: token!, ...vars } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
+  });
+}
+
+export function useVerifyPin() {
+  const { token } = useAuth();
+  return useMutation({
+    mutationFn: (vars: { pin: string }) => verifyPin({ data: { token: token!, ...vars } }),
+  });
+}
+
+export function useSetBiometric() {
+  const { token } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { enabled: boolean }) => setBiometric({ data: { token: token!, ...vars } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["security"] }),
   });
 }

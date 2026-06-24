@@ -2,17 +2,18 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Zap, Copy, Check, Wallet, LayoutGrid,
-  ChevronRight, TrendingUp, Lock, ArrowLeft, X as XIcon, QrCode, Loader2, CheckCircle2, ExternalLink
+  ChevronRight, TrendingUp, Lock, ArrowLeft, X as XIcon, QrCode, Loader2, CheckCircle2, ExternalLink, ShieldCheck
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Sheet } from "./Sheet";
 import { fmtSats, satsToZMW, BTC_PRICE_ZMW, type Vault } from "@/lib/ustack-data";
 import { useCurrency } from "@/lib/currency-context";
-import { useVaults, useMobileMoneyDeposit, useCreateInvoice, useCheckInvoiceStatus } from "@/lib/hooks/useAppData";
+import { useVaults, useMobileMoneyDeposit, useCreateInvoice, useCheckInvoiceStatus, useVerifyPin, useSecurityStatus } from "@/lib/hooks/useAppData";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
+import { PinPad } from "../PinPad";
 
-type Step = "dest" | "vault" | "method" | "processing" | "done";
+type Step = "dest" | "vault" | "method" | "auth" | "processing" | "done";
 type Dest = "balance" | "vault";
 
 const PROVIDERS = [
@@ -50,11 +51,15 @@ export function DepositSheet({
   const [copied, setCopied] = useState(false);
   const [walletPickerOpen, setWalletPickerOpen] = useState(false);
   const [error, setError] = useState("");
+  const [authPin, setAuthPin] = useState("");
+  const [authError, setAuthError] = useState("");
 
   const { data: vaults = [] } = useVaults();
   const { data: priceData } = useBtcPrice();
   const priceZmw = priceData?.priceZmw ?? BTC_PRICE_ZMW;
   const { fmtValue } = useCurrency();
+  const { data: security } = useSecurityStatus();
+  const verifyPin = useVerifyPin();
 
   const momoDeposit = useMobileMoneyDeposit();
   const createInvoice = useCreateInvoice();
@@ -81,6 +86,19 @@ export function DepositSheet({
     setStep("dest"); setDest("balance"); setSelectedVault(null);
     setTab("momo"); setPhone(""); setAmount("1000"); setLnAmount("");
     setInvoiceData(null); setWalletPickerOpen(false); setError("");
+    setAuthPin(""); setAuthError("");
+  };
+
+  const handleAuthComplete = async (pin: string) => {
+    setAuthError("");
+    try {
+      await verifyPin.mutateAsync({ pin });
+      setStep("method");
+      setTimeout(() => generateInvoiceNow(), 50);
+    } catch (e: unknown) {
+      setAuthError(e instanceof Error ? e.message : "Incorrect PIN");
+      setAuthPin("");
+    }
   };
 
   const reset = () => { resetAll(); onClose(); };
@@ -91,7 +109,7 @@ export function DepositSheet({
     else setStep("vault");
   };
 
-  const selectVault = (v: Vault) => { setSelectedVault(v); setStep("method"); };
+  const selectVault = (v: Vault) => { setSelectedVault(v); setStep("method"); setTab("lightning"); };
   const destLabel = dest === "balance" ? "Available Balance" : selectedVault?.name ?? "Vault";
 
   const canConfirm = () => {
@@ -121,7 +139,7 @@ export function DepositSheet({
     }
   };
 
-  const handleGenerateInvoice = async () => {
+  const generateInvoiceNow = async () => {
     if (!lnAmount || Number(lnAmount) <= 0) return;
     try {
       const result = await createInvoice.mutateAsync({
@@ -135,8 +153,17 @@ export function DepositSheet({
     }
   };
 
+  const handleGenerateInvoice = () => {
+    if (dest === "vault" && (security?.pinEnabled || security?.biometricEnabled)) {
+      setAuthPin(""); setAuthError("");
+      setStep("auth");
+    } else {
+      generateInvoiceNow();
+    }
+  };
+
   const titleMap: Record<Step, string> = {
-    dest: "Add Sats", vault: "Select Vault", method: destLabel, processing: "Add Sats", done: "Add Sats",
+    dest: "Add Sats", vault: "Select Vault", method: destLabel, auth: "Authorize Deposit", processing: "Add Sats", done: "Add Sats",
   };
 
   return (
@@ -334,6 +361,18 @@ export function DepositSheet({
                 </motion.div>
               )}
             </AnimatePresence>
+          </motion.div>
+        )}
+
+        {/* Auth step: PIN verification for vault deposits */}
+        {step === "auth" && (
+          <motion.div key="auth" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-4 pt-2">
+            <button onClick={() => setStep("method")} className="flex items-center gap-1 text-xs text-muted-foreground self-start mb-1"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
+            <div className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
+              <ShieldCheck className="w-7 h-7" />
+            </div>
+            <p className="text-sm text-muted-foreground text-center">Enter your PIN to authorize the deposit into <span className="font-semibold text-foreground">{selectedVault?.name}</span></p>
+            <PinPad pin={authPin} onChange={setAuthPin} onComplete={handleAuthComplete} error={authError} disabled={verifyPin.isPending} />
           </motion.div>
         )}
 
