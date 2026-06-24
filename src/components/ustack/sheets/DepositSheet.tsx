@@ -41,7 +41,7 @@ export function DepositSheet({
   const [step, setStep] = useState<Step>("dest");
   const [dest, setDest] = useState<Dest>("balance");
   const [selectedVault, setSelectedVault] = useState<Vault | null>(null);
-  const [tab, setTab] = useState<"momo" | "lightning">("momo");
+  const [tab, setTab] = useState<"momo" | "lightning">("lightning");
   const [provider, setProvider] = useState<"airtel" | "mtn" | "zamtel">("mtn");
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("1000");

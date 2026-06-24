@@ -150,11 +150,17 @@ export async function createLightningInvoice(
     }),
   });
 
+  type InvoicePayload = { invoice?: { paymentRequest: string; paymentHash: string; satoshis: number; expiresAt: string }; errors?: { message: string }[] };
   const json = await res.json() as {
-    data?: { lnInvoiceCreate?: { invoice?: { paymentRequest: string; paymentHash: string; satoshis: number; expiresAt: string }; errors?: { message: string }[] } };
+    data?: {
+      lnInvoiceCreate?: InvoicePayload;
+      lnUsdInvoiceCreateOnBehalfOfRecipient?: InvoicePayload;
+    };
     errors?: { message: string }[];
   };
-  const result = json.data?.lnInvoiceCreate;
+  const result = isUsdMode
+    ? json.data?.lnUsdInvoiceCreateOnBehalfOfRecipient
+    : json.data?.lnInvoiceCreate;
   if (!result?.invoice) {
     const msg =
       result?.errors?.[0]?.message ??
