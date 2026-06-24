@@ -18,3 +18,9 @@ id = "Le1YvfSi61AL8N5buTznD"
 uri = "file://exports/ustack_full_export.tar.gz"
 type = "unspecified"
 title = "UStack Full Export — database + all API source files"
+
+[[outputs]]
+id = "iFpuf0mZN-GO6INaL1PuP"
+uri = "file://exports/ustack_complete_export.tar.gz"
+type = "unspecified"
+title = "UStack Complete Export — all backend, DB + env reference"
