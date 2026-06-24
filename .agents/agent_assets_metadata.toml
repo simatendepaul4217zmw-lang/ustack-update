@@ -17,7 +17,7 @@ title = "UStack Database — full schema + data (.sql as .txt)"
 id = "Le1YvfSi61AL8N5buTznD"
 uri = "file://exports/ustack_full_export.tar.gz"
 type = "unspecified"
-title = "UStack Full Export — database + all API source files"
+title = "UStack Full Export — Reference + Database with all data"
 
 [[outputs]]
 id = "iFpuf0mZN-GO6INaL1PuP"
