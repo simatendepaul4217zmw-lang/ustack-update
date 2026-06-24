@@ -30,3 +30,15 @@ id = "cfo3e2qHZlqOVnS-v2VBl"
 uri = "file://exports/ustack_database_full.sql.txt"
 type = "text"
 title = "UStack Database — all 13 tables, all data (fresh dump)"
+
+[[outputs]]
+id = "5pQOvqsJQwY9qn1GEJgey"
+uri = "file://exports/USTACK_REFERENCE.md"
+type = "text"
+title = "UStack Reference — APIs, Keys, Webhooks, Tables"
+
+[[outputs]]
+id = "vg_E3hbAY5woX36wnvEX2"
+uri = "file://exports/ustack_offline_reference.txt"
+type = "text"
+title = "UStack Complete Offline Copy (Reference + Database)"

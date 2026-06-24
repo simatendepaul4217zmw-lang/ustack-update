@@ -1,0 +1,1983 @@
+====== USTACK_REFERENCE.md ======
+
+# UStack — Full Offline Reference
+**Generated:** 24 June 2026  
+**Stack:** TanStack Start · React 19 · PostgreSQL · Tailwind CSS 4 · Capacitor (Android)
+
+---
+
+## 1. DATABASE — All 13 Tables
+
+### `users`
+Core account record. One row per user.
+```
+id                uuid          PK, default gen_random_uuid()
+username          varchar(50)   UNIQUE, NOT NULL
+email             varchar(255)
+account_status    varchar(20)   default 'active'
+created_at        timestamptz   default now()
+updated_at        timestamptz   default now()
+```
+
+### `profiles`
+Extended user info, security settings, PIN.
+```
+id                        uuid          PK
+user_id                   uuid          FK → users.id (CASCADE)
+display_name              varchar(100)
+avatar_initials           varchar(5)
+avatar_color              varchar(20)   default 'btc'
+profile_picture_url       text
+biometric_enabled         boolean       default false
+notification_preferences  jsonb         default '{}'
+transaction_pin_hash      text          bcrypt hash of 4-digit PIN
+transaction_pin_enabled   boolean       default false, NOT NULL
+transaction_pin_created_at timestamptz
+transaction_pin_updated_at timestamptz
+failed_pin_attempts       integer       default 0, NOT NULL
+transaction_lock_until    timestamptz   set after 5 failed PIN attempts
+created_at                timestamptz
+updated_at                timestamptz
+```
+
+### `wallets`
+One wallet per user. Holds sats balance.
+```
+id              uuid    PK
+user_id         uuid    FK → users.id (CASCADE), UNIQUE
+available_sats  bigint  default 0   (sats free to use)
+vault_sats      bigint  default 0   (sats locked in vaults)
+created_at      timestamptz
+updated_at      timestamptz
+```
+
+### `vaults`
+Savings buckets. Each user can have many.
+```
+id                    uuid        PK
+user_id               uuid        FK → users.id (CASCADE)
+name                  varchar(50) NOT NULL
+vault_type            varchar(10) CHECK IN ('stack', 'hodl')
+emoji                 varchar(10) default '💰'
+accent                varchar(10) default 'btc'
+goal_sats             bigint      default 0
+current_sats          bigint      default 0
+goal_fiat             numeric(18,2) default 0
+currency              varchar(10) default 'ZMW'
+locked_until          timestamptz   (hodl vaults only)
+withdrawal_penalty_pct integer    default 0
+status                varchar(20) default 'active'
+streak_days           integer     default 0
+last_deposit_at       timestamptz
+created_at            timestamptz
+updated_at            timestamptz
+```
+
+### `transactions`
+Every deposit, withdrawal, and vault move.
+```
+id                     uuid        PK
+user_id                uuid        FK → users.id (CASCADE)
+vault_id               uuid        FK → vaults.id (SET NULL)
+type                   varchar(30) e.g. 'deposit', 'withdrawal', 'vault_deposit', 'vault_withdrawal'
+amount_sats            bigint      default 0, NOT NULL
+status                 varchar(20) default 'pending' → 'confirmed'/'failed'
+method                 varchar(30) e.g. 'lightning', 'momo_airtel', 'momo_mtn', 'momo_zamtel'
+metadata               jsonb       extra data (phone, provider, lipila IDs, etc.)
+external_id            text        Lipila externalId or Blink payment hash
+lightning_invoice      text        BOLT11 invoice string
+lightning_payment_hash text        indexed for webhook lookup
+created_at             timestamptz
+updated_at             timestamptz
+```
+
+### `sessions`
+JWT refresh tokens. One row per active device/session.
+```
+id             uuid   PK
+user_id        uuid   FK → users.id (CASCADE)
+refresh_token  text   UNIQUE
+expires_at     timestamptz  (30 days)
+created_at     timestamptz
+```
+
+### `otp_codes`
+Email OTP for login and signup. Deleted after use.
+```
+id          uuid         PK
+email       varchar(255) indexed
+code        varchar(6)   6-digit numeric
+expires_at  timestamptz  5 minutes from creation
+used        boolean      default false
+created_at  timestamptz
+```
+
+### `notifications`
+In-app notification bell items.
+```
+id          uuid        PK
+user_id     uuid        FK → users.id (CASCADE)
+kind        varchar(30) e.g. 'deposit_confirmed', 'price_drop', 'vault_goal'
+title       text        NOT NULL
+body        text
+unread      boolean     default true
+created_at  timestamptz
+```
+
+### `activity_logs`
+Audit trail of user actions.
+```
+id          uuid        PK
+user_id     uuid        FK → users.id (CASCADE)
+action      varchar(50) e.g. 'deposit', 'withdraw', 'vault_created'
+title       text
+meta        text
+created_at  timestamptz
+```
+
+### `btc_prices`
+BTC price history fetched every 60 seconds from CoinGecko.
+```
+id          integer (serial)  PK
+price_usd   numeric(18,2)
+price_zmw   numeric(18,2)
+fetched_at  timestamptz  default now(), indexed DESC
+```
+
+### `price_protection`
+Per-user price protection setting (auto-convert to USD if BTC drops).
+```
+id            uuid        PK
+user_id       uuid        FK → users.id (CASCADE), UNIQUE
+enabled       boolean     default false
+threshold_pct integer     default 20
+asset_state   varchar(20) default 'btc'  ('btc' or 'usd')
+created_at    timestamptz
+updated_at    timestamptz
+```
+
+### `treasury_state`
+Single-row platform treasury (tracks BTC/USD mode).
+```
+id                    integer (serial)  PK  (always 1 row)
+current_mode          text    default 'btc'  ('btc' or 'usd')
+reference_price_usd   numeric
+protection_price_usd  numeric
+pending_action        text    ('convert_to_usd' | 'convert_to_btc' | null)
+pending_started_at    timestamptz
+last_transition_at    timestamptz
+last_transition_price numeric
+btc_wallet_id         text    Blink BTC wallet ID
+usd_wallet_id         text    Blink USD wallet ID
+created_at            timestamptz
+updated_at            timestamptz
+```
+
+### `treasury_transitions`
+Log of every treasury mode switch.
+```
+id              integer (serial)  PK
+from_mode       text  NOT NULL
+to_mode         text  NOT NULL
+trigger_price   numeric  NOT NULL  (price that triggered the switch)
+reference_price numeric  NOT NULL
+blink_tx_id     text     (Blink transaction ID if one was made)
+created_at      timestamptz
+```
+
+---
+
+## 2. DATABASE INDEXES
+
+| Index | Table | Column |
+|---|---|---|
+| idx_activity_user | activity_logs | user_id |
+| idx_btc_prices_fetched | btc_prices | fetched_at DESC |
+| idx_notifications_user | notifications | user_id |
+| idx_otp_email | otp_codes | email |
+| idx_sessions_refresh | sessions | refresh_token |
+| idx_transactions_user | transactions | user_id |
+| idx_txn_payment_hash | transactions | lightning_payment_hash |
+| idx_vaults_user | vaults | user_id |
+| idx_wallets_user | wallets | user_id |
+
+---
+
+## 3. ENVIRONMENT VARIABLES — All Required Keys
+
+| Variable | What it is | Required? |
+|---|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (Replit managed) | ✅ Always |
+| `JWT_SECRET` | Signs JWT access tokens (short-lived, 15min) | ✅ Always |
+| `SESSION_SECRET` | Fallback if JWT_SECRET not set (same purpose) | ✅ Always |
+| `BLINK_API_KEY` | Blink Lightning API key — from dashboard.blink.sv | ✅ For live Lightning |
+| `BLINK_WALLET_ID` | Blink BTC wallet ID — optional (auto-fetched if missing) | ⚠️ Optional |
+| `BLINK_WEBHOOK_SECRET` | HMAC-SHA256 secret to verify Blink webhook signatures | ✅ For live Lightning |
+| `LIPILA_API_KEY` | Lipila Mobile Money API key — from blaze.lipila.dev | ✅ For live MoMo |
+| `LIPILA_WEBHOOK_SECRET` | Shared secret to verify Lipila webhook signatures | ✅ For live MoMo |
+| `LIPILA_BASE_URL` | Lipila API base URL | ⚠️ Optional (defaults to https://blaze.lipila.dev) |
+| `RESEND_API_KEY` | Resend email API key — for sending OTP emails | ✅ Always |
+
+**Mock mode:** If `BLINK_API_KEY` is not set → Blink runs in mock mode (no real Lightning). If `LIPILA_API_KEY` is not set → Lipila runs in mock mode (no real MoMo).
+
+---
+
+## 4. EXTERNAL APIs IN USE
+
+### Blink (Lightning Bitcoin)
+- **Purpose:** Create Lightning invoices (deposits), send Lightning payments (withdrawals), track treasury BTC balance
+- **API URL:** `https://api.blink.sv/graphql` (GraphQL)
+- **Auth:** `X-API-KEY: <BLINK_API_KEY>` header
+- **Dashboard:** https://dashboard.blink.sv
+- **What the app calls:**
+  - `Me` query → get wallet IDs
+  - `lnInvoiceCreateOnBehalfOfRecipient` → create deposit invoice
+  - `lnInvoicePaymentSend` → send Lightning withdrawal
+  - `AccountDetails` query → get live wallet balance
+
+### Lipila (Zambian Mobile Money)
+- **Purpose:** Accept ZMW from users via Airtel Money / MTN MoMo / Zamtel Kwacha, then payout withdrawals
+- **API URL:** `https://blaze.lipila.dev` (REST)
+- **Auth:** `Authorization: Bearer <LIPILA_API_KEY>` + `key` in body
+- **Dashboard:** https://blaze.lipila.dev
+- **What the app calls:**
+  - `POST /api/v1/payments/request` → collect ZMW from customer (deposit)
+  - `POST /api/v1/payments/disburse` → send ZMW to customer (withdrawal)
+  - `GET /api/v1/payments/status/{transactionId}` → poll payment status
+
+### CoinGecko (BTC Price)
+- **Purpose:** Fetch live BTC/USD and BTC/ZMW price every 60 seconds
+- **API URL:** `https://api.coingecko.com/api/v3`
+- **Auth:** None (free public tier)
+- **Endpoint used:** `GET /simple/price?ids=bitcoin&vs_currencies=usd,zmw`
+- **No API key needed**
+
+### Resend (Email)
+- **Purpose:** Send OTP verification emails to users during signup and login
+- **API URL:** Resend SDK (npm package `resend`)
+- **Auth:** `RESEND_API_KEY`
+- **Dashboard:** https://resend.com
+- **From address:** `UStack <onboarding@ustack.site>`
+- **Email sent:** 6-digit OTP code, expires in 5 minutes
+
+---
+
+## 5. WEBHOOK ENDPOINTS
+
+### Blink Webhook (Lightning deposits incoming)
+| | |
+|---|---|
+| **Route** | `POST /api/blink-webhook` |
+| **Trigger** | Blink calls this when a Lightning payment is received into the platform wallet |
+| **Verification** | HMAC-SHA256 of raw body using `BLINK_WEBHOOK_SECRET` — checked via `timingSafeEqual` |
+| **What it does** | Matches `lightning_payment_hash` in `transactions` table → marks status `confirmed` → credits user wallet |
+| **Register at** | https://dashboard.blink.sv → Webhooks → add your domain + `/api/blink-webhook` |
+| **Health check** | `GET /api/blink-webhook` → `{ ok: true, service: "UStack Blink webhook" }` |
+
+### Lipila Webhook (Mobile Money payment status)
+| | |
+|---|---|
+| **Primary route** | `POST /api/webhooks/lipila` |
+| **Legacy route** | `POST /api/lipila-webhook` (same handler, kept for compatibility) |
+| **Trigger** | Lipila calls this when a MoMo collection or disbursement completes or fails |
+| **Verification** | Checks `LIPILA_WEBHOOK_SECRET` from request headers |
+| **What it does** | Matches `external_id` in `transactions` table → marks status `confirmed`/`failed` → credits/reverses user wallet |
+| **Register at** | https://blaze.lipila.dev → Dashboard → Webhook URL → set to `https://yourdomain.replit.app/api/webhooks/lipila` |
+| **Health check** | `GET /api/webhooks/lipila` → `{ ok: true, service: "UStack Lipila webhook" }` |
+
+---
+
+## 6. INTERNAL API ROUTES (read-only, no auth)
+
+| Route | Method | What it returns |
+|---|---|---|
+| `/api/treasury-status` | GET | Current treasury mode, BTC/USD prices, drop %, pending action |
+| `/api/treasury-history` | GET | Last 20 treasury BTC↔USD transitions |
+
+---
+
+## 7. AUTH FLOW SUMMARY
+
+```
+New user:
+  Enter username + email → POST /api/auth/request-otp
+  Enter 6-digit code     → POST /api/auth/verify-otp-signup
+  Account created → JWT access token (15min) + refresh token (30 days) stored
+
+Returning user:
+  Enter email            → POST /api/auth/request-otp
+  Enter 6-digit code     → POST /api/auth/verify-otp
+  Logged in → JWT access token (15min) + refresh token (30 days)
+
+After login (day-to-day):
+  Access token refreshed silently using refresh token
+  OTP never asked again unless user logs out or 30-day session expires
+
+PIN / Biometric:
+  Used only to AUTHORIZE withdrawals and to UNLOCK the app
+  Set up in Settings → Security
+  Stored as bcrypt hash in profiles.transaction_pin_hash
+  5 failed attempts → account locked for a timed period
+```
+
+---
+
+## 8. DATABASE FILE
+
+The full PostgreSQL dump (schema + all data) is in this same folder:
+**`ustack_database_dump.sql`**
+
+To restore on any PostgreSQL server:
+```bash
+psql <your-database-url> < ustack_database_dump.sql
+```
+
+
+====== ustack_database_dump.sql ======
+
+--
+-- PostgreSQL database dump
+--
+
+\restrict C2vBzeE1geM1VPReEYKwDwYm6GZnLVBrstVv8aXc7324fklVTSHH56ErkHAjsZx
+
+-- Dumped from database version 16.10
+-- Dumped by pg_dump version 16.10
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: activity_logs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.activity_logs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid,
+    action character varying(50) NOT NULL,
+    title text,
+    meta text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: btc_prices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.btc_prices (
+    id integer NOT NULL,
+    price_usd numeric(18,2),
+    price_zmw numeric(18,2),
+    fetched_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: btc_prices_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.btc_prices_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: btc_prices_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.btc_prices_id_seq OWNED BY public.btc_prices.id;
+
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind character varying(30) NOT NULL,
+    title text NOT NULL,
+    body text,
+    unread boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: otp_codes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.otp_codes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code character varying(6) NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    email character varying(255)
+);
+
+
+--
+-- Name: price_protection; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.price_protection (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    enabled boolean DEFAULT false,
+    threshold_pct integer DEFAULT 20,
+    asset_state character varying(20) DEFAULT 'btc'::character varying,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.profiles (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    display_name character varying(100),
+    avatar_initials character varying(5),
+    avatar_color character varying(20) DEFAULT 'btc'::character varying,
+    profile_picture_url text,
+    biometric_enabled boolean DEFAULT false,
+    notification_preferences jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    transaction_pin_hash text,
+    transaction_pin_enabled boolean DEFAULT false NOT NULL,
+    transaction_pin_created_at timestamp with time zone,
+    transaction_pin_updated_at timestamp with time zone,
+    failed_pin_attempts integer DEFAULT 0 NOT NULL,
+    transaction_lock_until timestamp with time zone
+);
+
+
+--
+-- Name: sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    refresh_token text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.transactions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    vault_id uuid,
+    type character varying(30) NOT NULL,
+    amount_sats bigint DEFAULT 0 NOT NULL,
+    status character varying(20) DEFAULT 'pending'::character varying,
+    method character varying(30),
+    metadata jsonb DEFAULT '{}'::jsonb,
+    external_id text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    lightning_invoice text,
+    lightning_payment_hash text
+);
+
+
+--
+-- Name: treasury_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.treasury_state (
+    id integer NOT NULL,
+    current_mode text DEFAULT 'btc'::text NOT NULL,
+    reference_price_usd numeric NOT NULL,
+    protection_price_usd numeric NOT NULL,
+    pending_action text,
+    pending_started_at timestamp with time zone,
+    last_transition_at timestamp with time zone,
+    last_transition_price numeric,
+    btc_wallet_id text,
+    usd_wallet_id text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: treasury_state_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.treasury_state_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: treasury_state_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.treasury_state_id_seq OWNED BY public.treasury_state.id;
+
+
+--
+-- Name: treasury_transitions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.treasury_transitions (
+    id integer NOT NULL,
+    from_mode text NOT NULL,
+    to_mode text NOT NULL,
+    trigger_price numeric NOT NULL,
+    reference_price numeric NOT NULL,
+    blink_tx_id text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: treasury_transitions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.treasury_transitions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: treasury_transitions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.treasury_transitions_id_seq OWNED BY public.treasury_transitions.id;
+
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    username character varying(50) NOT NULL,
+    email character varying(255),
+    account_status character varying(20) DEFAULT 'active'::character varying,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: vaults; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vaults (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name character varying(50) NOT NULL,
+    vault_type character varying(10) NOT NULL,
+    emoji character varying(10) DEFAULT '💰'::character varying,
+    accent character varying(10) DEFAULT 'btc'::character varying,
+    goal_sats bigint DEFAULT 0 NOT NULL,
+    current_sats bigint DEFAULT 0 NOT NULL,
+    goal_fiat numeric(18,2) DEFAULT 0,
+    currency character varying(10) DEFAULT 'ZMW'::character varying,
+    locked_until timestamp with time zone,
+    withdrawal_penalty_pct integer DEFAULT 0,
+    status character varying(20) DEFAULT 'active'::character varying,
+    streak_days integer DEFAULT 0,
+    last_deposit_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT vaults_vault_type_check CHECK (((vault_type)::text = ANY ((ARRAY['stack'::character varying, 'hodl'::character varying])::text[])))
+);
+
+
+--
+-- Name: wallets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.wallets (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    available_sats bigint DEFAULT 0,
+    vault_sats bigint DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: btc_prices id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.btc_prices ALTER COLUMN id SET DEFAULT nextval('public.btc_prices_id_seq'::regclass);
+
+
+--
+-- Name: treasury_state id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.treasury_state ALTER COLUMN id SET DEFAULT nextval('public.treasury_state_id_seq'::regclass);
+
+
+--
+-- Name: treasury_transitions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.treasury_transitions ALTER COLUMN id SET DEFAULT nextval('public.treasury_transitions_id_seq'::regclass);
+
+
+--
+-- Data for Name: activity_logs; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.activity_logs (id, user_id, action, title, meta, created_at) FROM stdin;
+5938853b-89b0-435f-9939-fc4447e8736b	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	vault_created	Created "Emergency" vault	Stack Vault	2026-06-11 23:52:31.352218+00
+aa7efdf2-1eb8-4cae-9ac2-3e12c83e0070	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	deposit	Added 100 sats	Lightning deposit confirmed	2026-06-12 00:02:36.582387+00
+d41c0700-11b7-4edc-b124-592ebee55cc4	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	deposit	Added 20 sats	Lightning deposit confirmed	2026-06-12 04:31:19.177126+00
+73e62087-52db-45bf-b0e8-6f0a5fef7a7f	9d2b3176-90dd-490c-a0f9-5e856da87071	vault_created	Created "Future Business" vault	Stack Vault	2026-06-12 06:53:39.473795+00
+7fa7f183-b07a-4653-9cef-bb07cd8d8883	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	deposit	Added 871 sats	Mobile Money · AIRTEL	2026-06-14 23:58:30.277593+00
+c6ec223d-4614-496b-8df1-36920a68cfa9	\N	treasury_protection_timer_started	Protection Confirmation Started	{"current_price": 60425, "protection_price": 64532.02}	2026-06-24 16:35:34.543859+00
+559e0cc0-76cd-45c4-9aaf-b568c65cb836	\N	treasury_protection_executing	Treasury Protection Executing	{"current_price": 60252}	2026-06-24 16:41:32.954715+00
+8ae2d284-8f1a-4516-86d4-0967236222be	\N	treasury_converted_to_usd	Treasury Moved to USD Protection	{"blink_tx_id": "noop", "trigger_price": 60252, "reference_price": "65849"}	2026-06-24 16:41:33.136103+00
+0753f8e2-89d7-433c-a5f3-1a4b26cb09e6	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	vault_deposit	Added 5 sats to vault	Lightning vault deposit confirmed	2026-06-24 17:07:07.230308+00
+1228ef71-42ac-489b-8ba1-5189736d44d4	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	security	PIN set up	{}	2026-06-24 17:38:20.161505+00
+2888e9fc-d1fb-414a-ba82-f33caba83d89	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	security	Transaction authorized	{}	2026-06-24 17:57:56.539217+00
+\.
+
+
+--
+-- Data for Name: btc_prices; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.btc_prices (id, price_usd, price_zmw, fetched_at) FROM stdin;
+1	63440.00	1095347.00	2026-06-11 22:50:44.86554+00
+2	63465.00	1095786.00	2026-06-11 22:53:05.556379+00
+3	63463.00	1095743.00	2026-06-11 22:55:06.355187+00
+4	63489.00	1096200.00	2026-06-11 22:57:59.545417+00
+5	63478.00	1096003.00	2026-06-11 23:00:01.42721+00
+6	63399.00	1094643.00	2026-06-11 23:02:28.413156+00
+7	63337.00	1093567.00	2026-06-11 23:09:04.205879+00
+8	63316.00	1093205.00	2026-06-11 23:11:15.194064+00
+9	63436.00	1095287.00	2026-06-11 23:39:05.039084+00
+10	63580.00	1097774.00	2026-06-11 23:46:40.508887+00
+11	63558.00	1097398.00	2026-06-11 23:49:30.6437+00
+12	63527.00	1096863.00	2026-06-11 23:51:45.804146+00
+13	63479.00	1096019.00	2026-06-11 23:53:46.570623+00
+14	63529.00	1096888.00	2026-06-11 23:55:47.393674+00
+15	63558.00	1097393.00	2026-06-11 23:57:48.282529+00
+16	63554.00	1097321.00	2026-06-11 23:59:49.013862+00
+17	63556.00	1097348.00	2026-06-12 00:01:50.083289+00
+18	63512.00	1096603.00	2026-06-12 00:04:36.807814+00
+19	63531.00	1096925.00	2026-06-12 00:06:37.604779+00
+20	63604.00	1098180.00	2026-06-12 00:08:38.486591+00
+21	63665.00	1099230.00	2026-06-12 00:10:45.4294+00
+22	63645.00	1098891.00	2026-06-12 00:12:46.27801+00
+23	63650.00	1098984.00	2026-06-12 00:15:10.018021+00
+24	63611.00	1098308.00	2026-06-12 00:17:10.867542+00
+25	63570.00	1097594.00	2026-06-12 00:19:11.691822+00
+26	63582.00	1097802.00	2026-06-12 00:21:12.516819+00
+27	63570.00	1097596.00	2026-06-12 00:23:23.489543+00
+28	63541.00	1097102.00	2026-06-12 00:25:34.374115+00
+29	63514.00	1096632.00	2026-06-12 00:27:35.294562+00
+30	63529.00	1096881.00	2026-06-12 00:29:36.188778+00
+31	63550.00	1097255.00	2026-06-12 00:31:52.448983+00
+32	63560.00	1097429.00	2026-06-12 00:33:54.223643+00
+33	63687.00	1096512.00	2026-06-12 04:28:11.010185+00
+34	63691.00	1096593.00	2026-06-12 04:30:50.548831+00
+35	63711.00	1096931.00	2026-06-12 04:32:51.805315+00
+36	63674.00	1096297.00	2026-06-12 04:34:52.676819+00
+37	63657.00	1095999.00	2026-06-12 04:36:53.836262+00
+38	63619.00	1095354.00	2026-06-12 04:43:09.735414+00
+39	63629.00	1095521.00	2026-06-12 04:45:12.739843+00
+71	63637.00	1095657.00	2026-06-12 04:48:33.635968+00
+72	63626.00	1095463.00	2026-06-12 04:50:34.752952+00
+73	63630.00	1095532.00	2026-06-12 04:52:37.698208+00
+74	62885.00	1082709.00	2026-06-12 06:52:06.06192+00
+75	63723.00	1113117.00	2026-06-14 19:43:42.462897+00
+76	63724.00	1113120.00	2026-06-14 19:46:51.782436+00
+77	63714.00	1112944.00	2026-06-14 19:48:52.846464+00
+78	63731.00	1113254.00	2026-06-14 19:50:57.469319+00
+79	63731.00	1113254.00	2026-06-14 19:53:16.700534+00
+80	64743.00	1130920.00	2026-06-14 21:25:25.580688+00
+81	64848.00	1132762.00	2026-06-14 21:27:26.629239+00
+82	64714.00	1130425.00	2026-06-14 21:29:27.474731+00
+83	64736.00	1130796.00	2026-06-14 21:31:28.33071+00
+84	64702.00	1130215.00	2026-06-14 21:33:29.719168+00
+85	64842.00	1132653.00	2026-06-14 21:35:30.7188+00
+86	64850.00	1132792.00	2026-06-14 21:37:31.89879+00
+87	64860.00	1132971.00	2026-06-14 21:39:32.844093+00
+88	65294.00	1140552.00	2026-06-14 21:48:49.993142+00
+89	65436.00	1143036.00	2026-06-14 21:52:31.692101+00
+90	65428.00	1142892.00	2026-06-14 21:54:32.615425+00
+91	65407.00	1142518.00	2026-06-14 21:56:33.51394+00
+92	65405.00	1142492.00	2026-06-14 21:58:34.515642+00
+93	65325.00	1141086.00	2026-06-14 22:00:35.505953+00
+94	65348.00	1141496.00	2026-06-14 22:02:36.36862+00
+95	65408.00	1142546.00	2026-06-14 22:04:37.395275+00
+96	65198.00	1138879.00	2026-06-14 22:06:38.310395+00
+97	65092.00	1137022.00	2026-06-14 22:08:39.262694+00
+98	64969.00	1134882.00	2026-06-14 22:10:40.25662+00
+99	65009.00	1135570.00	2026-06-14 22:11:52.289339+00
+100	65009.00	1135570.00	2026-06-14 22:12:18.147429+00
+101	65009.00	1135570.00	2026-06-14 22:12:52.247235+00
+102	65117.00	1137451.00	2026-06-14 22:13:18.123635+00
+103	65117.00	1137451.00	2026-06-14 22:13:29.442602+00
+104	65181.00	1138571.00	2026-06-14 22:14:29.031405+00
+105	65181.00	1138571.00	2026-06-14 22:15:21.329487+00
+106	65118.00	1137476.00	2026-06-14 22:16:21.269297+00
+107	65118.00	1137476.00	2026-06-14 22:17:21.231373+00
+108	65084.00	1136880.00	2026-06-14 22:18:21.278896+00
+109	65084.00	1136880.00	2026-06-14 22:19:21.237936+00
+110	65083.00	1136857.00	2026-06-14 22:20:21.261008+00
+111	65083.00	1136857.00	2026-06-14 22:21:21.253947+00
+112	65132.00	1137717.00	2026-06-14 22:22:21.25579+00
+113	65132.00	1137717.00	2026-06-14 22:23:21.236263+00
+114	65178.00	1138521.00	2026-06-14 22:24:21.279836+00
+115	65178.00	1138521.00	2026-06-14 22:25:21.239532+00
+116	65157.00	1138154.00	2026-06-14 22:26:21.270527+00
+117	65157.00	1138154.00	2026-06-14 22:27:21.231408+00
+118	65122.00	1137554.00	2026-06-14 22:28:21.244694+00
+119	65122.00	1137554.00	2026-06-14 22:29:21.250069+00
+120	65184.00	1138629.00	2026-06-14 22:30:21.269269+00
+121	65184.00	1138629.00	2026-06-14 22:31:21.256367+00
+122	65207.00	1139037.00	2026-06-14 22:32:21.24743+00
+123	65207.00	1139037.00	2026-06-14 22:33:21.217866+00
+124	65175.00	1138476.00	2026-06-14 22:34:21.260196+00
+125	65175.00	1138476.00	2026-06-14 22:35:21.239925+00
+126	65258.00	1139929.00	2026-06-14 22:36:21.252026+00
+127	65258.00	1139929.00	2026-06-14 22:37:21.22208+00
+128	65366.00	1141814.00	2026-06-14 22:38:21.27718+00
+129	65366.00	1141814.00	2026-06-14 22:39:21.219341+00
+130	65361.00	1141714.00	2026-06-14 22:39:28.343659+00
+131	65361.00	1141714.00	2026-06-14 22:40:21.262349+00
+132	65361.00	1141714.00	2026-06-14 22:40:28.2965+00
+133	65314.00	1140904.00	2026-06-14 22:41:21.327803+00
+134	65314.00	1140904.00	2026-06-14 22:41:28.314952+00
+135	65314.00	1140904.00	2026-06-14 22:42:21.260684+00
+136	65326.00	1141111.00	2026-06-14 22:42:28.33405+00
+137	65326.00	1141111.00	2026-06-14 22:43:21.276806+00
+138	65326.00	1141111.00	2026-06-14 22:43:28.316155+00
+139	65360.00	1141711.00	2026-06-14 22:44:21.303651+00
+140	65360.00	1141711.00	2026-06-14 22:44:28.312656+00
+141	65360.00	1141711.00	2026-06-14 22:45:21.292943+00
+142	65398.00	1142371.00	2026-06-14 22:45:28.340869+00
+143	65398.00	1142371.00	2026-06-14 22:46:21.238182+00
+144	65398.00	1142371.00	2026-06-14 22:46:28.315913+00
+145	65401.00	1142427.00	2026-06-14 22:47:21.300659+00
+146	65401.00	1142427.00	2026-06-14 22:47:28.312646+00
+147	65401.00	1142427.00	2026-06-14 22:48:21.239042+00
+148	65389.00	1142218.00	2026-06-14 22:48:28.333317+00
+149	65389.00	1142218.00	2026-06-14 22:49:21.243342+00
+150	65389.00	1142218.00	2026-06-14 22:49:28.310957+00
+151	65383.00	1142108.00	2026-06-14 22:50:21.29413+00
+152	65383.00	1142108.00	2026-06-14 22:50:28.314014+00
+153	65383.00	1142108.00	2026-06-14 22:51:21.247499+00
+154	65423.00	1142812.00	2026-06-14 22:51:28.342186+00
+155	65423.00	1142812.00	2026-06-14 22:52:21.242024+00
+156	65423.00	1142812.00	2026-06-14 22:52:28.319363+00
+157	65430.00	1142926.00	2026-06-14 22:53:21.281843+00
+158	65430.00	1142926.00	2026-06-14 22:53:28.314793+00
+159	65430.00	1142926.00	2026-06-14 22:54:21.251848+00
+160	65399.00	1142389.00	2026-06-14 22:54:28.347835+00
+161	65399.00	1142389.00	2026-06-14 22:55:21.260524+00
+162	65395.00	1142313.00	2026-06-14 22:55:28.379278+00
+163	65395.00	1142313.00	2026-06-14 22:56:11.604766+00
+164	65395.00	1142313.00	2026-06-14 22:56:21.256078+00
+165	65395.00	1142313.00	2026-06-14 22:56:28.331224+00
+166	65394.00	1142303.00	2026-06-14 22:57:11.633117+00
+167	65394.00	1142303.00	2026-06-14 22:57:21.245382+00
+168	65394.00	1142303.00	2026-06-14 22:57:28.331911+00
+169	65394.00	1142303.00	2026-06-14 22:57:43.362443+00
+170	65394.00	1142303.00	2026-06-14 22:58:11.608525+00
+171	65399.00	1142392.00	2026-06-14 22:58:20.01943+00
+172	65399.00	1142392.00	2026-06-14 22:58:21.230936+00
+173	65365.00	1141784.00	2026-06-14 22:59:28.346335+00
+174	65365.00	1141784.00	2026-06-14 22:59:43.387846+00
+175	65365.00	1141784.00	2026-06-14 23:00:11.612503+00
+176	65365.00	1141784.00	2026-06-14 23:00:20.006091+00
+177	65365.00	1141784.00	2026-06-14 23:00:21.226353+00
+178	65365.00	1141784.00	2026-06-14 23:00:28.319002+00
+179	65363.00	1141760.00	2026-06-14 23:00:43.3911+00
+180	65363.00	1141760.00	2026-06-14 23:01:11.616582+00
+181	65363.00	1141760.00	2026-06-14 23:01:20.015941+00
+182	65355.00	1141616.00	2026-06-14 23:02:28.351842+00
+183	65355.00	1141616.00	2026-06-14 23:02:43.365789+00
+184	65355.00	1141616.00	2026-06-14 23:03:11.612753+00
+185	65355.00	1141616.00	2026-06-14 23:03:20.00612+00
+186	65355.00	1141616.00	2026-06-14 23:03:21.226113+00
+187	65355.00	1141616.00	2026-06-14 23:03:28.325802+00
+188	65324.00	1141073.00	2026-06-14 23:03:43.402844+00
+189	65324.00	1141073.00	2026-06-14 23:04:11.60632+00
+190	65324.00	1141073.00	2026-06-14 23:04:20.014905+00
+191	65303.00	1140707.00	2026-06-14 23:05:28.36193+00
+192	65303.00	1140707.00	2026-06-14 23:05:43.367154+00
+193	65303.00	1140707.00	2026-06-14 23:06:11.616731+00
+194	65303.00	1140707.00	2026-06-14 23:06:20.008513+00
+195	65303.00	1140707.00	2026-06-14 23:06:21.233515+00
+196	65303.00	1140707.00	2026-06-14 23:06:28.323797+00
+197	65254.00	1139855.00	2026-06-14 23:06:43.396172+00
+198	65254.00	1139855.00	2026-06-14 23:07:11.607187+00
+199	65254.00	1139855.00	2026-06-14 23:07:20.008046+00
+200	65350.00	1141525.00	2026-06-14 23:08:28.357196+00
+201	65350.00	1141525.00	2026-06-14 23:08:43.360215+00
+202	65350.00	1141525.00	2026-06-14 23:09:11.626189+00
+203	65350.00	1141525.00	2026-06-14 23:09:20.00679+00
+204	65350.00	1141525.00	2026-06-14 23:09:21.233534+00
+205	65350.00	1141525.00	2026-06-14 23:09:28.327593+00
+206	65429.00	1142916.00	2026-06-14 23:09:43.410437+00
+207	65429.00	1142916.00	2026-06-14 23:10:11.612518+00
+208	65429.00	1142916.00	2026-06-14 23:10:20.018099+00
+209	65412.00	1142606.00	2026-06-14 23:11:28.359224+00
+210	65412.00	1142606.00	2026-06-14 23:11:43.367792+00
+211	65412.00	1142606.00	2026-06-14 23:12:11.611862+00
+212	65412.00	1142606.00	2026-06-14 23:12:20.017963+00
+213	65412.00	1142606.00	2026-06-14 23:12:20.578821+00
+214	65412.00	1142606.00	2026-06-14 23:12:21.237929+00
+215	65518.00	1144462.00	2026-06-14 23:13:43.403146+00
+216	65518.00	1144462.00	2026-06-14 23:13:57.80942+00
+217	65518.00	1144462.00	2026-06-14 23:14:11.625456+00
+218	65518.00	1144462.00	2026-06-14 23:14:20.033292+00
+219	65518.00	1144462.00	2026-06-14 23:14:20.590402+00
+220	65518.00	1144462.00	2026-06-14 23:14:21.238472+00
+221	65528.00	1144636.00	2026-06-14 23:15:28.356333+00
+222	65528.00	1144636.00	2026-06-14 23:15:43.375797+00
+223	65528.00	1144636.00	2026-06-14 23:15:57.830538+00
+224	65528.00	1144636.00	2026-06-14 23:16:11.613185+00
+225	65528.00	1144636.00	2026-06-14 23:16:20.012339+00
+226	65528.00	1144636.00	2026-06-14 23:16:20.590301+00
+227	65528.00	1144636.00	2026-06-14 23:16:21.245495+00
+228	65573.00	1145426.00	2026-06-14 23:17:28.365182+00
+229	65573.00	1145426.00	2026-06-14 23:17:43.376844+00
+230	65573.00	1145426.00	2026-06-14 23:17:57.825708+00
+231	65573.00	1145426.00	2026-06-14 23:17:59.975+00
+232	65573.00	1145426.00	2026-06-14 23:18:02.08673+00
+233	65573.00	1145426.00	2026-06-14 23:18:11.624668+00
+234	65550.00	1145020.00	2026-06-14 23:19:20.049277+00
+235	65550.00	1145020.00	2026-06-14 23:19:20.591681+00
+236	65550.00	1145020.00	2026-06-14 23:19:21.244792+00
+237	65550.00	1145020.00	2026-06-14 23:19:28.357092+00
+238	65550.00	1145020.00	2026-06-14 23:19:43.373794+00
+239	65531.00	1144684.00	2026-06-14 23:20:58.145877+00
+240	65531.00	1144684.00	2026-06-14 23:20:59.993071+00
+241	65531.00	1144684.00	2026-06-14 23:21:02.093594+00
+242	65531.00	1144684.00	2026-06-14 23:21:11.624899+00
+243	65531.00	1144684.00	2026-06-14 23:21:20.029152+00
+244	65531.00	1144684.00	2026-06-14 23:21:20.602046+00
+267	65504.00	1144223.00	2026-06-14 23:22:19.121172+00
+268	65504.00	1144223.00	2026-06-14 23:22:36.547042+00
+269	65504.00	1144223.00	2026-06-14 23:23:18.558998+00
+270	65499.00	1144137.00	2026-06-14 23:23:36.579041+00
+271	65499.00	1144137.00	2026-06-14 23:24:18.543559+00
+272	65499.00	1144137.00	2026-06-14 23:24:36.570684+00
+273	65512.00	1144357.00	2026-06-14 23:25:18.597728+00
+274	65512.00	1144357.00	2026-06-14 23:25:25.058168+00
+275	65543.00	1144905.00	2026-06-14 23:26:25.076807+00
+276	65543.00	1144905.00	2026-06-14 23:27:25.043354+00
+277	65605.00	1145988.00	2026-06-14 23:28:25.068062+00
+278	65605.00	1145988.00	2026-06-14 23:29:25.041768+00
+279	65665.00	1147031.00	2026-06-14 23:30:25.083848+00
+280	65665.00	1147031.00	2026-06-14 23:31:25.042156+00
+281	65661.00	1146967.00	2026-06-14 23:32:25.097883+00
+282	65661.00	1146967.00	2026-06-14 23:33:25.129152+00
+283	65538.00	1144805.00	2026-06-14 23:34:25.088454+00
+284	65538.00	1144805.00	2026-06-14 23:34:45.821484+00
+285	65596.00	1145826.00	2026-06-14 23:35:45.846307+00
+286	65596.00	1145826.00	2026-06-14 23:36:45.748106+00
+287	65611.00	1146081.00	2026-06-14 23:37:29.899494+00
+288	65611.00	1146081.00	2026-06-14 23:37:45.718724+00
+289	65611.00	1146081.00	2026-06-14 23:38:29.872301+00
+290	65602.00	1145930.00	2026-06-14 23:38:45.735436+00
+291	65602.00	1145930.00	2026-06-14 23:39:29.879402+00
+292	65602.00	1145930.00	2026-06-14 23:39:45.729357+00
+293	65587.00	1145661.00	2026-06-14 23:40:29.93456+00
+294	65587.00	1145661.00	2026-06-14 23:40:45.721691+00
+295	65587.00	1145661.00	2026-06-14 23:41:29.878881+00
+296	65581.00	1145560.00	2026-06-14 23:41:45.749557+00
+297	65581.00	1145560.00	2026-06-14 23:42:06.290328+00
+298	65581.00	1145560.00	2026-06-14 23:42:29.8722+00
+299	65581.00	1145560.00	2026-06-14 23:42:45.714991+00
+300	65581.00	1145564.00	2026-06-14 23:43:06.322739+00
+301	65581.00	1145564.00	2026-06-14 23:43:29.883381+00
+302	65581.00	1145564.00	2026-06-14 23:43:45.718676+00
+303	65581.00	1145564.00	2026-06-14 23:44:06.291647+00
+304	65571.00	1145393.00	2026-06-14 23:44:29.928089+00
+305	65571.00	1145393.00	2026-06-14 23:44:45.719767+00
+306	65571.00	1145393.00	2026-06-14 23:45:06.292729+00
+307	65571.00	1145393.00	2026-06-14 23:45:29.884323+00
+308	65550.00	1145021.00	2026-06-14 23:45:45.749787+00
+309	65550.00	1145021.00	2026-06-14 23:46:06.301013+00
+310	65550.00	1145021.00	2026-06-14 23:46:27.357278+00
+311	65550.00	1145021.00	2026-06-14 23:46:29.863295+00
+312	65550.00	1145021.00	2026-06-14 23:46:45.72246+00
+313	65554.00	1145092.00	2026-06-14 23:47:06.333799+00
+314	65554.00	1145092.00	2026-06-14 23:47:27.368246+00
+315	65554.00	1145092.00	2026-06-14 23:47:29.863823+00
+316	65554.00	1145092.00	2026-06-14 23:47:45.723825+00
+317	65554.00	1145092.00	2026-06-14 23:48:06.310765+00
+318	65584.00	1145624.00	2026-06-14 23:48:23.030522+00
+319	65584.00	1145624.00	2026-06-14 23:48:27.374074+00
+320	65597.00	1145846.00	2026-06-14 23:49:29.886904+00
+321	65597.00	1145846.00	2026-06-14 23:49:45.71716+00
+322	65597.00	1145846.00	2026-06-14 23:50:06.30814+00
+323	65597.00	1145846.00	2026-06-14 23:50:23.018267+00
+324	65597.00	1145846.00	2026-06-14 23:50:27.370697+00
+325	65597.00	1145846.00	2026-06-14 23:50:28.376781+00
+326	65628.00	1146385.00	2026-06-14 23:51:45.771522+00
+327	65628.00	1146385.00	2026-06-14 23:52:06.48263+00
+328	65628.00	1146385.00	2026-06-14 23:52:23.10431+00
+329	65628.00	1146385.00	2026-06-14 23:52:27.405702+00
+330	65628.00	1146385.00	2026-06-14 23:52:28.422001+00
+331	65628.00	1146385.00	2026-06-14 23:52:29.90267+00
+332	65683.00	1147343.00	2026-06-14 23:53:45.75339+00
+333	65683.00	1147343.00	2026-06-14 23:54:06.318757+00
+334	65683.00	1147343.00	2026-06-14 23:54:23.023688+00
+335	65683.00	1147343.00	2026-06-14 23:54:27.384361+00
+336	65683.00	1147343.00	2026-06-14 23:54:28.385386+00
+337	65683.00	1147343.00	2026-06-14 23:54:29.876663+00
+338	65720.00	1147989.00	2026-06-14 23:55:45.749763+00
+339	65720.00	1147989.00	2026-06-14 23:56:06.32236+00
+340	65720.00	1147989.00	2026-06-14 23:56:13.858377+00
+341	65720.00	1147989.00	2026-06-14 23:56:23.039979+00
+342	65720.00	1147989.00	2026-06-14 23:56:27.387905+00
+343	65720.00	1147989.00	2026-06-14 23:56:28.382583+00
+344	65720.00	1147988.00	2026-06-14 23:57:45.763647+00
+345	65720.00	1147988.00	2026-06-14 23:58:06.330045+00
+346	65720.00	1147988.00	2026-06-14 23:58:13.856016+00
+347	65720.00	1147988.00	2026-06-14 23:58:23.026742+00
+348	65720.00	1147988.00	2026-06-14 23:58:27.38553+00
+349	65720.00	1147988.00	2026-06-14 23:58:28.407958+00
+350	65714.00	1147880.00	2026-06-14 23:59:45.752777+00
+351	65714.00	1147880.00	2026-06-15 00:00:06.314297+00
+352	65714.00	1147880.00	2026-06-15 00:00:13.863219+00
+353	65714.00	1147880.00	2026-06-15 00:00:23.027907+00
+354	65714.00	1147880.00	2026-06-15 00:00:27.377546+00
+355	65714.00	1147880.00	2026-06-15 00:00:28.384871+00
+356	65712.00	1147852.00	2026-06-15 00:01:45.759986+00
+357	65712.00	1147852.00	2026-06-15 00:02:06.328272+00
+358	65712.00	1147852.00	2026-06-15 00:02:13.854155+00
+359	65712.00	1147852.00	2026-06-15 00:02:23.041472+00
+360	65712.00	1147852.00	2026-06-15 00:02:27.39297+00
+361	65712.00	1147852.00	2026-06-15 00:02:28.387547+00
+362	65688.00	1147432.00	2026-06-15 00:03:45.766024+00
+363	65688.00	1147432.00	2026-06-15 00:04:06.33497+00
+364	65688.00	1147432.00	2026-06-15 00:04:13.860467+00
+365	65688.00	1147432.00	2026-06-15 00:04:23.04049+00
+366	65688.00	1147432.00	2026-06-15 00:04:27.37997+00
+367	65688.00	1147432.00	2026-06-15 00:04:28.38731+00
+368	65628.00	1146383.00	2026-06-15 00:05:45.771267+00
+369	65628.00	1146383.00	2026-06-15 00:06:06.32019+00
+370	65628.00	1146383.00	2026-06-15 00:06:12.749985+00
+371	65628.00	1146383.00	2026-06-15 00:06:13.84095+00
+372	65628.00	1146383.00	2026-06-15 00:06:23.052629+00
+373	65628.00	1146383.00	2026-06-15 00:06:27.372092+00
+374	65648.00	1146735.00	2026-06-15 00:07:29.914572+00
+375	65648.00	1146735.00	2026-06-15 00:07:45.745289+00
+376	65648.00	1146735.00	2026-06-15 00:08:12.74815+00
+377	65693.00	1147523.00	2026-06-15 00:08:43.822473+00
+378	65693.00	1147523.00	2026-06-15 00:09:43.772129+00
+379	65718.00	1147950.00	2026-06-15 00:10:43.793006+00
+380	65718.00	1147950.00	2026-06-15 00:10:50.277364+00
+381	65718.00	1147950.00	2026-06-15 00:10:54.580466+00
+382	65718.00	1147950.00	2026-06-15 00:11:43.772625+00
+383	65720.00	1147993.00	2026-06-15 00:11:50.404228+00
+384	65720.00	1147993.00	2026-06-15 00:11:54.584839+00
+385	65720.00	1147993.00	2026-06-15 00:12:43.776658+00
+386	65720.00	1147993.00	2026-06-15 00:12:50.290647+00
+387	65708.00	1147787.00	2026-06-15 00:12:54.615161+00
+388	65708.00	1147787.00	2026-06-15 00:13:43.829519+00
+389	65708.00	1147787.00	2026-06-15 00:13:50.308159+00
+390	65708.00	1147787.00	2026-06-15 00:13:54.587631+00
+391	65744.00	1148413.00	2026-06-15 00:14:43.788056+00
+392	65744.00	1148413.00	2026-06-15 00:14:50.289186+00
+393	65744.00	1148413.00	2026-06-15 00:14:54.590372+00
+394	65744.00	1148413.00	2026-06-15 00:15:43.778083+00
+395	65776.00	1148967.00	2026-06-15 00:15:50.312046+00
+396	65776.00	1148967.00	2026-06-15 00:15:54.586858+00
+397	65776.00	1148967.00	2026-06-15 00:16:43.777941+00
+398	65776.00	1148967.00	2026-06-15 00:16:50.297812+00
+399	65735.00	1148262.00	2026-06-15 00:16:54.615723+00
+400	65735.00	1148262.00	2026-06-15 00:17:43.78615+00
+401	65735.00	1148262.00	2026-06-15 00:17:47.954616+00
+402	65735.00	1148262.00	2026-06-15 00:17:50.260633+00
+403	65735.00	1148262.00	2026-06-15 00:17:54.599522+00
+404	65727.00	1148117.00	2026-06-15 00:18:43.813891+00
+405	65727.00	1148117.00	2026-06-15 00:18:47.952842+00
+406	65727.00	1148117.00	2026-06-15 00:18:50.253772+00
+407	65727.00	1148117.00	2026-06-15 00:18:54.593204+00
+408	65727.00	1148117.00	2026-06-15 00:19:43.788811+00
+409	65698.00	1147603.00	2026-06-15 00:19:47.971083+00
+410	65698.00	1147603.00	2026-06-15 00:19:50.262717+00
+411	65698.00	1147603.00	2026-06-15 00:19:54.599939+00
+412	65698.00	1147603.00	2026-06-15 00:20:43.782562+00
+413	65698.00	1147603.00	2026-06-15 00:20:47.985718+00
+414	65694.00	1147533.00	2026-06-15 00:20:50.300143+00
+415	65694.00	1147533.00	2026-06-15 00:20:54.601857+00
+416	65694.00	1147533.00	2026-06-15 00:21:33.384557+00
+417	65694.00	1147533.00	2026-06-15 00:21:43.782845+00
+418	65694.00	1147533.00	2026-06-15 00:21:47.965742+00
+419	65694.00	1147533.00	2026-06-15 00:21:50.490312+00
+420	65704.00	1147713.00	2026-06-15 00:21:54.667053+00
+421	65704.00	1147713.00	2026-06-15 00:22:33.394454+00
+422	65704.00	1147713.00	2026-06-15 00:22:43.769538+00
+423	65704.00	1147713.00	2026-06-15 00:22:47.971705+00
+424	65704.00	1147713.00	2026-06-15 00:22:50.265626+00
+425	65704.00	1147713.00	2026-06-15 00:22:54.600935+00
+426	65670.00	1147113.00	2026-06-15 00:23:33.415485+00
+427	65670.00	1147113.00	2026-06-15 00:23:43.778266+00
+428	65670.00	1147113.00	2026-06-15 00:23:47.981607+00
+429	65670.00	1147113.00	2026-06-15 00:23:50.27304+00
+430	65670.00	1147113.00	2026-06-15 00:23:54.600564+00
+431	65670.00	1147113.00	2026-06-15 00:24:33.405069+00
+432	65665.00	1147038.00	2026-06-15 00:24:43.80319+00
+433	65665.00	1147038.00	2026-06-15 00:24:47.978155+00
+434	65665.00	1147038.00	2026-06-15 00:24:50.272125+00
+435	65665.00	1147038.00	2026-06-15 00:24:54.604172+00
+436	65665.00	1147038.00	2026-06-15 00:25:33.408805+00
+437	65665.00	1147038.00	2026-06-15 00:25:43.780309+00
+438	65663.00	1147002.00	2026-06-15 00:25:48.006393+00
+439	65663.00	1147002.00	2026-06-15 00:25:50.272274+00
+440	65663.00	1147002.00	2026-06-15 00:25:54.598297+00
+441	65663.00	1147002.00	2026-06-15 00:26:33.402713+00
+442	65663.00	1147002.00	2026-06-15 00:26:43.783586+00
+443	65663.00	1147002.00	2026-06-15 00:26:47.969525+00
+444	65675.00	1147198.00	2026-06-15 00:26:50.287521+00
+445	65675.00	1147198.00	2026-06-15 00:26:54.600301+00
+446	65675.00	1147198.00	2026-06-15 00:27:26.352667+00
+447	65675.00	1147198.00	2026-06-15 00:27:33.408032+00
+448	65675.00	1147198.00	2026-06-15 00:27:43.779805+00
+449	65675.00	1147198.00	2026-06-15 00:27:47.983022+00
+450	65675.00	1147198.00	2026-06-15 00:27:50.270433+00
+451	65721.00	1148002.00	2026-06-15 00:28:54.634454+00
+452	65721.00	1148002.00	2026-06-15 00:29:07.246707+00
+453	65721.00	1148002.00	2026-06-15 00:29:23.595274+00
+454	65721.00	1148002.00	2026-06-15 00:29:26.337535+00
+455	65721.00	1148002.00	2026-06-15 00:29:33.388472+00
+456	65721.00	1148002.00	2026-06-15 00:29:43.784508+00
+457	65710.00	1147818.00	2026-06-15 00:30:48.006024+00
+458	65710.00	1147818.00	2026-06-15 00:30:50.279103+00
+459	65710.00	1147818.00	2026-06-15 00:30:54.600103+00
+460	65710.00	1147818.00	2026-06-15 00:31:07.253477+00
+461	65710.00	1147818.00	2026-06-15 00:31:23.60515+00
+462	65710.00	1147818.00	2026-06-15 00:31:26.344194+00
+463	65710.00	1147818.00	2026-06-15 00:31:33.404468+00
+464	65710.00	1147818.00	2026-06-15 00:31:43.779203+00
+465	65627.00	1146368.00	2026-06-15 00:33:27.608202+00
+466	65627.00	1146368.00	2026-06-15 00:33:39.27997+00
+467	65627.00	1146368.00	2026-06-15 00:34:27.588861+00
+468	65614.00	1146142.00	2026-06-15 00:34:39.304806+00
+469	65614.00	1146142.00	2026-06-15 00:35:27.577781+00
+470	65614.00	1146142.00	2026-06-15 00:35:39.296078+00
+471	65569.00	1145361.00	2026-06-15 00:36:27.617833+00
+472	65569.00	1145361.00	2026-06-15 00:36:39.30008+00
+473	65569.00	1145361.00	2026-06-15 00:37:27.576703+00
+474	65555.00	1145104.00	2026-06-15 00:37:39.312138+00
+475	65555.00	1145104.00	2026-06-15 00:38:27.595402+00
+476	65555.00	1145104.00	2026-06-15 00:38:39.305098+00
+477	65546.00	1144955.00	2026-06-15 00:39:27.61374+00
+478	65546.00	1144955.00	2026-06-15 00:39:39.297338+00
+479	65546.00	1144955.00	2026-06-15 00:40:27.596681+00
+480	65516.00	1144424.00	2026-06-15 00:40:39.356845+00
+481	65516.00	1144424.00	2026-06-15 00:41:27.581024+00
+482	65516.00	1144424.00	2026-06-15 00:41:39.328675+00
+483	65494.00	1144037.00	2026-06-15 00:42:27.644902+00
+484	65494.00	1144037.00	2026-06-15 00:42:39.339683+00
+485	65494.00	1144037.00	2026-06-15 00:43:27.580737+00
+486	65484.00	1143877.00	2026-06-15 00:43:39.326522+00
+487	65484.00	1143877.00	2026-06-15 00:44:27.583832+00
+488	65484.00	1143877.00	2026-06-15 00:44:39.300316+00
+489	65479.00	1143788.00	2026-06-15 00:45:27.621918+00
+490	65479.00	1143788.00	2026-06-15 00:45:39.300466+00
+491	65479.00	1143788.00	2026-06-15 00:46:27.593195+00
+492	65488.00	1143942.00	2026-06-15 00:46:39.328792+00
+493	65488.00	1143942.00	2026-06-15 00:47:27.594313+00
+494	65488.00	1143942.00	2026-06-15 00:47:39.307488+00
+495	65506.00	1144258.00	2026-06-15 00:48:27.610634+00
+496	65506.00	1144258.00	2026-06-15 00:48:39.301552+00
+497	65506.00	1144258.00	2026-06-15 00:49:27.578265+00
+498	65542.00	1144886.00	2026-06-15 00:49:39.343571+00
+499	65542.00	1144886.00	2026-06-15 00:50:27.591747+00
+500	65542.00	1144886.00	2026-06-15 00:50:39.32589+00
+501	65521.00	1144521.00	2026-06-15 00:51:27.608305+00
+502	65521.00	1144521.00	2026-06-15 00:51:39.296376+00
+503	65521.00	1144521.00	2026-06-15 00:52:27.59815+00
+504	65505.00	1144241.00	2026-06-15 00:52:39.344728+00
+505	65505.00	1144241.00	2026-06-15 00:53:27.596482+00
+506	65505.00	1144241.00	2026-06-15 00:53:39.319752+00
+507	65516.00	1144428.00	2026-06-15 00:54:27.615213+00
+508	65516.00	1144428.00	2026-06-15 00:54:39.310863+00
+509	65516.00	1144428.00	2026-06-15 00:55:27.606696+00
+510	65520.00	1144500.00	2026-06-15 00:55:39.3436+00
+511	65520.00	1144500.00	2026-06-15 00:56:27.613515+00
+512	65520.00	1144500.00	2026-06-15 00:56:39.312249+00
+513	65553.00	1145071.00	2026-06-15 00:57:27.604965+00
+514	65553.00	1145071.00	2026-06-15 00:57:39.300777+00
+515	65561.00	1145209.00	2026-06-15 00:58:27.626997+00
+516	65561.00	1145209.00	2026-06-15 00:58:39.318622+00
+517	65561.00	1145209.00	2026-06-15 00:59:27.603103+00
+518	65585.00	1145636.00	2026-06-15 00:59:39.34976+00
+519	65585.00	1145636.00	2026-06-15 01:00:27.598893+00
+520	65585.00	1145636.00	2026-06-15 01:00:39.310891+00
+521	65578.00	1145517.00	2026-06-15 01:01:27.597818+00
+522	65578.00	1145517.00	2026-06-15 01:01:39.304474+00
+523	65522.00	1144532.00	2026-06-15 01:02:27.642581+00
+524	65522.00	1144532.00	2026-06-15 01:02:39.329244+00
+525	65522.00	1144532.00	2026-06-15 01:03:27.60082+00
+526	65491.00	1144000.00	2026-06-15 01:03:39.335135+00
+527	65491.00	1144000.00	2026-06-15 01:04:27.611846+00
+528	65491.00	1144000.00	2026-06-15 01:04:39.326451+00
+529	65383.00	1142113.00	2026-06-15 01:05:27.615617+00
+530	65383.00	1142113.00	2026-06-15 01:05:39.311871+00
+531	65378.00	1142011.00	2026-06-15 01:06:27.599016+00
+532	65378.00	1142011.00	2026-06-15 01:06:39.330675+00
+533	65378.00	1142011.00	2026-06-15 01:07:12.233891+00
+534	65384.00	1142131.00	2026-06-15 01:08:12.265464+00
+535	65384.00	1142131.00	2026-06-15 01:09:12.222577+00
+536	65420.00	1142760.00	2026-06-15 01:10:12.211619+00
+537	65443.00	1143148.00	2026-06-15 01:11:12.228568+00
+538	65408.00	1142548.00	2026-06-15 01:12:12.241724+00
+539	65408.00	1142548.00	2026-06-15 01:13:12.225253+00
+540	65448.00	1143240.00	2026-06-15 01:14:12.214765+00
+541	65459.00	1143438.00	2026-06-15 01:15:12.243541+00
+542	65459.00	1143438.00	2026-06-15 01:16:12.216929+00
+543	65455.00	1143363.00	2026-06-15 01:17:12.213342+00
+544	65442.00	1143137.00	2026-06-15 01:18:12.227789+00
+545	65476.00	1143732.00	2026-06-15 01:19:12.24897+00
+546	65476.00	1143732.00	2026-06-15 01:20:12.250972+00
+547	65468.00	1143584.00	2026-06-15 01:21:12.224879+00
+548	65411.00	1142597.00	2026-06-15 01:22:12.268026+00
+549	65411.00	1142597.00	2026-06-15 01:23:12.225108+00
+550	65389.00	1142211.00	2026-06-15 01:24:12.230669+00
+551	65398.00	1142365.00	2026-06-15 01:25:12.262549+00
+552	65398.00	1142365.00	2026-06-15 01:26:12.233072+00
+553	65376.00	1141982.00	2026-06-15 01:27:12.246766+00
+554	65378.00	1142022.00	2026-06-15 01:28:12.264347+00
+555	65397.00	1142344.00	2026-06-15 01:29:12.299222+00
+556	65397.00	1142344.00	2026-06-15 01:30:12.23802+00
+557	65387.00	1142170.00	2026-06-15 01:31:12.252047+00
+558	65365.00	1141795.00	2026-06-15 01:32:12.233954+00
+559	65403.00	1142450.00	2026-06-15 01:33:12.268574+00
+560	65403.00	1142450.00	2026-06-15 01:34:12.244943+00
+561	65430.00	1142922.00	2026-06-15 01:35:12.259355+00
+562	65432.00	1142968.00	2026-06-15 01:36:12.25268+00
+563	65432.00	1142968.00	2026-06-15 01:37:12.250807+00
+564	65441.00	1143125.00	2026-06-15 01:38:12.246166+00
+565	65511.00	1144337.00	2026-06-15 01:39:12.280173+00
+566	65511.00	1144337.00	2026-06-15 01:40:12.245685+00
+567	65618.00	1146208.00	2026-06-15 01:41:12.275524+00
+568	65622.00	1146284.00	2026-06-15 01:42:12.293961+00
+569	65622.00	1146284.00	2026-06-15 01:43:12.27484+00
+570	65612.00	1146110.00	2026-06-15 01:44:12.243507+00
+571	65613.00	1146127.00	2026-06-15 01:45:12.244294+00
+572	65646.00	1146698.00	2026-06-15 01:46:12.274505+00
+573	65646.00	1146698.00	2026-06-15 01:47:12.28273+00
+574	65635.00	1146510.00	2026-06-15 01:48:12.264254+00
+575	65635.00	1146512.00	2026-06-15 01:49:12.283996+00
+576	65635.00	1146512.00	2026-06-15 01:50:12.267279+00
+577	65608.00	1146035.00	2026-06-15 01:51:12.253382+00
+578	65540.00	1144847.00	2026-06-15 01:52:12.296134+00
+579	65540.00	1144847.00	2026-06-15 01:53:12.244751+00
+580	65511.00	1144339.00	2026-06-15 01:54:12.244311+00
+581	65507.00	1144277.00	2026-06-15 01:55:12.296088+00
+582	65507.00	1144277.00	2026-06-15 01:56:12.249043+00
+583	65481.00	1143819.00	2026-06-15 01:57:12.278713+00
+584	65483.00	1143850.00	2026-06-15 01:58:12.254465+00
+585	65477.00	1143740.00	2026-06-15 01:59:12.284018+00
+586	65477.00	1143740.00	2026-06-15 02:00:12.264392+00
+587	65470.00	1143623.00	2026-06-15 02:01:12.262259+00
+588	65450.00	1143272.00	2026-06-15 02:02:12.277853+00
+589	65450.00	1143272.00	2026-06-15 02:03:12.283637+00
+590	65452.00	1143309.00	2026-06-15 02:04:12.264566+00
+591	65464.00	1143526.00	2026-06-15 02:05:12.266516+00
+592	65498.00	1144106.00	2026-06-15 02:06:12.322296+00
+593	65498.00	1144106.00	2026-06-15 02:07:12.281203+00
+594	65552.00	1145054.00	2026-06-15 02:08:12.2614+00
+595	65561.00	1145212.00	2026-06-15 02:09:12.298027+00
+596	65561.00	1145212.00	2026-06-15 02:09:52.350169+00
+597	65561.00	1145212.00	2026-06-15 02:10:12.275435+00
+598	65595.00	1145808.00	2026-06-15 02:11:12.270289+00
+599	65590.00	1145720.00	2026-06-15 02:12:12.304513+00
+600	65590.00	1145720.00	2026-06-15 02:13:12.290926+00
+601	65600.00	1145896.00	2026-06-15 02:14:12.277182+00
+602	65609.00	1146057.00	2026-06-15 02:15:12.288479+00
+603	65630.00	1146425.00	2026-06-15 02:16:12.290138+00
+604	65630.00	1146425.00	2026-06-15 02:17:12.283187+00
+605	65702.00	1147677.00	2026-06-15 02:18:12.2929+00
+606	65692.00	1147498.00	2026-06-15 02:19:12.304723+00
+607	65692.00	1147498.00	2026-06-15 02:20:12.272822+00
+608	65665.00	1147024.00	2026-06-15 02:21:12.300975+00
+609	65657.00	1146892.00	2026-06-15 02:22:12.311895+00
+610	65657.00	1146892.00	2026-06-15 02:23:12.286607+00
+611	65672.00	1147162.00	2026-06-15 02:24:12.273138+00
+612	65655.00	1146865.00	2026-06-15 02:25:12.306206+00
+613	65655.00	1146865.00	2026-06-15 02:26:12.281349+00
+614	65637.00	1146545.00	2026-06-15 02:27:12.328724+00
+615	65646.00	1146702.00	2026-06-15 02:28:12.336684+00
+616	65646.00	1146702.00	2026-06-15 02:29:12.291518+00
+617	65635.00	1146500.00	2026-06-15 02:30:12.355655+00
+618	65635.00	1146500.00	2026-06-15 02:31:12.291783+00
+619	65620.00	1146249.00	2026-06-15 02:32:12.339748+00
+620	65620.00	1146249.00	2026-06-15 02:33:12.304978+00
+621	65592.00	1145759.00	2026-06-15 02:34:12.354088+00
+622	65592.00	1145759.00	2026-06-15 02:35:12.299134+00
+623	65566.00	1145308.00	2026-06-15 02:36:12.313693+00
+624	65566.00	1145308.00	2026-06-15 02:37:12.308328+00
+625	65603.00	1145941.00	2026-06-15 02:38:12.309686+00
+626	65603.00	1145941.00	2026-06-15 02:39:12.299507+00
+627	65606.00	1146002.00	2026-06-15 02:40:12.31595+00
+628	65606.00	1146002.00	2026-06-15 02:41:12.309312+00
+629	65585.00	1145630.00	2026-06-15 02:42:12.322644+00
+630	65585.00	1145630.00	2026-06-15 02:43:12.298855+00
+631	65585.00	1145627.00	2026-06-15 02:44:12.320207+00
+632	65585.00	1145627.00	2026-06-15 02:45:12.302802+00
+633	65552.00	1145056.00	2026-06-15 02:46:12.336463+00
+634	65552.00	1145056.00	2026-06-15 02:47:12.299153+00
+635	65523.00	1144548.00	2026-06-15 02:48:12.341841+00
+636	65523.00	1144548.00	2026-06-15 02:49:12.301708+00
+637	65449.00	1143260.00	2026-06-15 02:50:12.354797+00
+638	65449.00	1143260.00	2026-06-15 02:51:12.313133+00
+639	65466.00	1143547.00	2026-06-15 02:52:12.326793+00
+640	65466.00	1143547.00	2026-06-15 02:53:12.326148+00
+641	65444.00	1143177.00	2026-06-15 02:54:12.329211+00
+671	65420.00	1142752.00	2026-06-15 02:55:24.06073+00
+672	65420.00	1142752.00	2026-06-15 02:56:22.361449+00
+673	65419.00	1142730.00	2026-06-15 02:57:22.408035+00
+674	65419.00	1142730.00	2026-06-15 02:58:22.358937+00
+675	65408.00	1142544.00	2026-06-15 02:59:22.378676+00
+676	65408.00	1142544.00	2026-06-15 03:00:22.375631+00
+677	65413.00	1142628.00	2026-06-15 03:01:22.389616+00
+678	65413.00	1142628.00	2026-06-15 03:02:22.358948+00
+679	65426.00	1142849.00	2026-06-15 03:03:22.384791+00
+680	65426.00	1142849.00	2026-06-15 03:04:22.366584+00
+681	65507.00	1144264.00	2026-06-15 03:05:22.936015+00
+682	65507.00	1144264.00	2026-06-15 03:06:22.369832+00
+683	65532.00	1144710.00	2026-06-15 03:07:22.412698+00
+684	65532.00	1144710.00	2026-06-15 03:08:22.368977+00
+685	65517.00	1144440.00	2026-06-15 03:09:22.397711+00
+686	65517.00	1144440.00	2026-06-15 03:10:22.366962+00
+687	65544.00	1144922.00	2026-06-15 03:11:22.400512+00
+688	65544.00	1144922.00	2026-06-15 03:12:22.383791+00
+689	65605.00	1145990.00	2026-06-15 03:13:22.40838+00
+690	65605.00	1145990.00	2026-06-15 03:14:22.383204+00
+691	65650.00	1146771.00	2026-06-15 03:15:22.726404+00
+692	65650.00	1146771.00	2026-06-15 03:16:22.375404+00
+693	65663.00	1146997.00	2026-06-15 03:17:22.410822+00
+694	65663.00	1146997.00	2026-06-15 03:18:22.373725+00
+695	65675.00	1147199.00	2026-06-15 03:19:22.411113+00
+696	65675.00	1147199.00	2026-06-15 03:20:22.378345+00
+729	65754.00	1157625.00	2026-06-16 02:30:18.908724+00
+730	65754.00	1157625.00	2026-06-16 02:31:16.875719+00
+731	65768.00	1157880.00	2026-06-16 02:32:16.881809+00
+732	65768.00	1157880.00	2026-06-16 02:33:16.868486+00
+733	65847.00	1159269.00	2026-06-16 02:34:16.883536+00
+734	65847.00	1159269.00	2026-06-16 02:35:16.871698+00
+735	65780.00	1158085.00	2026-06-16 02:36:16.880446+00
+736	65780.00	1158085.00	2026-06-16 02:37:16.864036+00
+737	65827.00	1158914.00	2026-06-16 02:38:16.884025+00
+738	65827.00	1158914.00	2026-06-16 02:39:16.857177+00
+739	65849.00	1159300.00	2026-06-16 02:40:16.901512+00
+740	60425.00	1089105.00	2026-06-24 16:35:34.463341+00
+741	60425.00	1089105.00	2026-06-24 16:36:32.971912+00
+742	60436.00	1089301.00	2026-06-24 16:37:32.9444+00
+743	60348.00	1087722.00	2026-06-24 16:38:32.954201+00
+744	60287.00	1086613.00	2026-06-24 16:39:32.979813+00
+745	60287.00	1086613.00	2026-06-24 16:40:32.968267+00
+746	60252.00	1085985.00	2026-06-24 16:41:32.948274+00
+747	60221.00	1085418.00	2026-06-24 16:42:32.962313+00
+748	60194.00	1084936.00	2026-06-24 16:43:32.95571+00
+749	60194.00	1084936.00	2026-06-24 16:44:07.244673+00
+750	60194.00	1084936.00	2026-06-24 16:44:07.258219+00
+751	60194.00	1084936.00	2026-06-24 16:44:07.352217+00
+753	60194.00	1084936.00	2026-06-24 16:44:07.357175+00
+754	60194.00	1084936.00	2026-06-24 16:44:07.32588+00
+752	60194.00	1084936.00	2026-06-24 16:44:07.343344+00
+755	60152.00	1084180.00	2026-06-24 16:46:07.170722+00
+756	60152.00	1084180.00	2026-06-24 16:46:07.201159+00
+757	60152.00	1084180.00	2026-06-24 16:46:07.267388+00
+758	60152.00	1084180.00	2026-06-24 16:46:07.269411+00
+759	60152.00	1084180.00	2026-06-24 16:46:07.270993+00
+760	60152.00	1084180.00	2026-06-24 16:46:07.275291+00
+761	60108.00	1083385.00	2026-06-24 16:48:07.187386+00
+762	60108.00	1083385.00	2026-06-24 16:48:07.467849+00
+763	60108.00	1083385.00	2026-06-24 16:48:07.520571+00
+764	60108.00	1083385.00	2026-06-24 16:48:07.522375+00
+765	60025.00	1081899.00	2026-06-24 16:48:33.035203+00
+766	60025.00	1081899.00	2026-06-24 16:49:07.18131+00
+767	60005.00	1081529.00	2026-06-24 16:50:07.159159+00
+768	60005.00	1081529.00	2026-06-24 16:50:07.218325+00
+769	60005.00	1081529.00	2026-06-24 16:50:07.305865+00
+770	60005.00	1081529.00	2026-06-24 16:50:07.807032+00
+771	60005.00	1081529.00	2026-06-24 16:50:07.824175+00
+772	60022.00	1081841.00	2026-06-24 16:51:07.276227+00
+773	60022.00	1081841.00	2026-06-24 16:51:07.356094+00
+774	60022.00	1081841.00	2026-06-24 16:52:07.15133+00
+775	59893.00	1079512.00	2026-06-24 16:52:07.22235+00
+776	59893.00	1079512.00	2026-06-24 16:52:07.296762+00
+777	59893.00	1079512.00	2026-06-24 16:52:07.470445+00
+778	59893.00	1079512.00	2026-06-24 16:52:07.477196+00
+779	59731.00	1076591.00	2026-06-24 16:53:07.542126+00
+780	59731.00	1076591.00	2026-06-24 16:53:07.545421+00
+781	59731.00	1076591.00	2026-06-24 16:53:07.546111+00
+782	59781.00	1077503.00	2026-06-24 16:54:32.991193+00
+783	59781.00	1077503.00	2026-06-24 16:55:07.15447+00
+784	59781.00	1077503.00	2026-06-24 16:55:07.192044+00
+785	59781.00	1077503.00	2026-06-24 16:55:07.292762+00
+786	59781.00	1077503.00	2026-06-24 16:55:07.468762+00
+787	59781.00	1077503.00	2026-06-24 16:55:07.469118+00
+788	59789.00	1077648.00	2026-06-24 16:56:07.158294+00
+789	59784.00	1077558.00	2026-06-24 16:57:07.199712+00
+790	59784.00	1077558.00	2026-06-24 16:57:07.206381+00
+791	59784.00	1077558.00	2026-06-24 16:57:07.294936+00
+792	59784.00	1077558.00	2026-06-24 16:57:07.491433+00
+793	59784.00	1077558.00	2026-06-24 16:57:07.491417+00
+794	59784.00	1077558.00	2026-06-24 16:58:07.159169+00
+795	59767.00	1077237.00	2026-06-24 16:59:07.507176+00
+796	59767.00	1077237.00	2026-06-24 16:59:07.51601+00
+797	59767.00	1077237.00	2026-06-24 16:59:07.520419+00
+798	59748.00	1076909.00	2026-06-24 16:59:32.971018+00
+799	59748.00	1076909.00	2026-06-24 16:59:47.598667+00
+800	59748.00	1076909.00	2026-06-24 17:00:07.168193+00
+801	59777.00	1077420.00	2026-06-24 17:01:07.201495+00
+802	59777.00	1077420.00	2026-06-24 17:01:07.21184+00
+803	59777.00	1077420.00	2026-06-24 17:01:07.303044+00
+804	59777.00	1077420.00	2026-06-24 17:01:07.503424+00
+805	59777.00	1077420.00	2026-06-24 17:01:07.50548+00
+807	59825.00	1078298.00	2026-06-24 17:02:07.529653+00
+806	59825.00	1078298.00	2026-06-24 17:02:07.530923+00
+808	59825.00	1078298.00	2026-06-24 17:02:32.98219+00
+809	59825.00	1078298.00	2026-06-24 17:02:47.599062+00
+810	59825.00	1078298.00	2026-06-24 17:03:07.21476+00
+811	59825.00	1078298.00	2026-06-24 17:03:07.225372+00
+812	59825.00	1078298.00	2026-06-24 17:03:07.312138+00
+813	59879.00	1079259.00	2026-06-24 17:04:07.168342+00
+814	59879.00	1079259.00	2026-06-24 17:04:07.200562+00
+815	59879.00	1079259.00	2026-06-24 17:04:07.298188+00
+816	59937.00	1080303.00	2026-06-24 17:05:07.163537+00
+817	59937.00	1080303.00	2026-06-24 17:05:07.202954+00
+818	59937.00	1080303.00	2026-06-24 17:05:07.29784+00
+819	59925.00	1080099.00	2026-06-24 17:06:07.171305+00
+820	59925.00	1080099.00	2026-06-24 17:06:07.304022+00
+821	59925.00	1080099.00	2026-06-24 17:06:07.477851+00
+822	59888.00	1079432.00	2026-06-24 17:07:07.15335+00
+823	59888.00	1079432.00	2026-06-24 17:07:07.192311+00
+824	59888.00	1079432.00	2026-06-24 17:07:07.295377+00
+825	59818.00	1078161.00	2026-06-24 17:08:07.502408+00
+826	59818.00	1078161.00	2026-06-24 17:08:07.503624+00
+827	59818.00	1078161.00	2026-06-24 17:08:32.966504+00
+828	59731.00	1076599.00	2026-06-24 17:08:47.584035+00
+829	59731.00	1076599.00	2026-06-24 17:09:07.157005+00
+830	59731.00	1076599.00	2026-06-24 17:09:07.227408+00
+831	59762.00	1077157.00	2026-06-24 17:10:07.235109+00
+832	59762.00	1077157.00	2026-06-24 17:10:07.476562+00
+833	59762.00	1077157.00	2026-06-24 17:10:07.49568+00
+834	59762.00	1077157.00	2026-06-24 17:10:07.518533+00
+835	59762.00	1077157.00	2026-06-24 17:10:32.993717+00
+836	59830.00	1078372.00	2026-06-24 17:11:47.596294+00
+837	59830.00	1078372.00	2026-06-24 17:12:07.167925+00
+838	59830.00	1078372.00	2026-06-24 17:12:07.205725+00
+839	59830.00	1078372.00	2026-06-24 17:12:07.293337+00
+840	59830.00	1078372.00	2026-06-24 17:12:07.483022+00
+841	59830.00	1078372.00	2026-06-24 17:12:07.48992+00
+842	59818.00	1078159.00	2026-06-24 17:13:07.16248+00
+843	59818.00	1078159.00	2026-06-24 17:13:32.973629+00
+844	59748.00	1076908.00	2026-06-24 17:14:07.503447+00
+845	59748.00	1076908.00	2026-06-24 17:14:07.507964+00
+846	59748.00	1076908.00	2026-06-24 17:14:32.974966+00
+847	59702.00	1076071.00	2026-06-24 17:14:47.635905+00
+848	59702.00	1076071.00	2026-06-24 17:15:07.16919+00
+849	59702.00	1076071.00	2026-06-24 17:15:07.210285+00
+850	59763.00	1077174.00	2026-06-24 17:16:07.186053+00
+851	59763.00	1077174.00	2026-06-24 17:16:07.206014+00
+852	59763.00	1077174.00	2026-06-24 17:16:07.306861+00
+853	59763.00	1077174.00	2026-06-24 17:16:07.475757+00
+854	59763.00	1077174.00	2026-06-24 17:16:07.47765+00
+855	59750.00	1076931.00	2026-06-24 17:17:07.529765+00
+856	59750.00	1076931.00	2026-06-24 17:17:07.537638+00
+857	59750.00	1076931.00	2026-06-24 17:17:07.537926+00
+858	59667.00	1075447.00	2026-06-24 17:18:32.978077+00
+859	59667.00	1075447.00	2026-06-24 17:18:47.601272+00
+860	59667.00	1075447.00	2026-06-24 17:19:07.222626+00
+861	59667.00	1075447.00	2026-06-24 17:19:07.230743+00
+862	59667.00	1075447.00	2026-06-24 17:19:07.308622+00
+863	59667.00	1075447.00	2026-06-24 17:19:07.487324+00
+864	59667.00	1075447.00	2026-06-24 17:19:07.509758+00
+865	59613.00	1074476.00	2026-06-24 17:20:07.182349+00
+866	59535.00	1073066.00	2026-06-24 17:21:07.19696+00
+867	59535.00	1073066.00	2026-06-24 17:21:07.208526+00
+868	59535.00	1073066.00	2026-06-24 17:21:07.299427+00
+869	59535.00	1073066.00	2026-06-24 17:21:07.483898+00
+870	59535.00	1073066.00	2026-06-24 17:21:07.485689+00
+871	59535.00	1073066.00	2026-06-24 17:22:07.175885+00
+872	59321.00	1069200.00	2026-06-24 17:23:55.377785+00
+873	59360.00	1069908.00	2026-06-24 17:24:37.783411+00
+874	59418.00	1070946.00	2026-06-24 17:25:37.73756+00
+875	59418.00	1070946.00	2026-06-24 17:25:52.904873+00
+876	59418.00	1070946.00	2026-06-24 17:26:00.365551+00
+877	59418.00	1070946.00	2026-06-24 17:26:13.051121+00
+878	59467.00	1071833.00	2026-06-24 17:27:13.02426+00
+879	59467.00	1071833.00	2026-06-24 17:28:12.979374+00
+880	59597.00	1074180.00	2026-06-24 17:29:12.970285+00
+881	59627.00	1074713.00	2026-06-24 17:30:12.9765+00
+882	59617.00	1074537.00	2026-06-24 17:31:13.006368+00
+883	59617.00	1074537.00	2026-06-24 17:32:12.974219+00
+884	59597.00	1074186.00	2026-06-24 17:33:12.993687+00
+885	59564.00	1073578.00	2026-06-24 17:34:12.96249+00
+886	59506.00	1072531.00	2026-06-24 17:35:13.006714+00
+887	59506.00	1072531.00	2026-06-24 17:36:12.988377+00
+888	59543.00	1073208.00	2026-06-24 17:37:12.96776+00
+889	59480.00	1072073.00	2026-06-24 17:38:12.969039+00
+890	59440.00	1071351.00	2026-06-24 17:39:13.017152+00
+891	59440.00	1071351.00	2026-06-24 17:40:12.980303+00
+892	59411.00	1070829.00	2026-06-24 17:40:19.518718+00
+893	59411.00	1070829.00	2026-06-24 17:41:12.969682+00
+894	59411.00	1070829.00	2026-06-24 17:41:19.515743+00
+895	59396.00	1070549.00	2026-06-24 17:42:12.980592+00
+896	59396.00	1070549.00	2026-06-24 17:42:19.518744+00
+897	59370.00	1070093.00	2026-06-24 17:43:12.992882+00
+898	59370.00	1070093.00	2026-06-24 17:43:19.533505+00
+899	59226.00	1067491.00	2026-06-24 17:47:00.142715+00
+900	59226.00	1067491.00	2026-06-24 17:48:00.024822+00
+901	59156.00	1066239.00	2026-06-24 17:49:00.016249+00
+902	59110.00	1065405.00	2026-06-24 17:50:00.017543+00
+903	59236.00	1067680.00	2026-06-24 17:51:00.031301+00
+904	59305.00	1068919.00	2026-06-24 17:52:00.024641+00
+905	59317.00	1069142.00	2026-06-24 17:53:00.050698+00
+906	59317.00	1069142.00	2026-06-24 17:54:00.038285+00
+907	59336.00	1069472.00	2026-06-24 17:55:00.023799+00
+908	59318.00	1069155.00	2026-06-24 17:56:00.050561+00
+909	59373.00	1070151.00	2026-06-24 17:57:00.021102+00
+910	59366.00	1070019.00	2026-06-24 17:58:00.032328+00
+911	59324.00	1069263.00	2026-06-24 17:59:00.050742+00
+912	59324.00	1069263.00	2026-06-24 18:00:00.024369+00
+913	59304.00	1068895.00	2026-06-24 18:01:00.047267+00
+914	59375.00	1070185.00	2026-06-24 18:02:00.034145+00
+915	59358.00	1069879.00	2026-06-24 18:03:00.032286+00
+916	59329.00	1069342.00	2026-06-24 18:04:00.047136+00
+917	59329.00	1069342.00	2026-06-24 18:05:00.03979+00
+918	59354.00	1069807.00	2026-06-24 18:06:00.030764+00
+919	59353.00	1069780.00	2026-06-24 18:07:00.020069+00
+920	59377.00	1070220.00	2026-06-24 18:08:00.027196+00
+921	59455.00	1071624.00	2026-06-24 18:09:00.051371+00
+922	59455.00	1071624.00	2026-06-24 18:10:00.037035+00
+923	59442.00	1071390.00	2026-06-24 18:11:00.024771+00
+924	59475.00	1071972.00	2026-06-24 18:12:00.02455+00
+925	59493.00	1072312.00	2026-06-24 18:13:00.020474+00
+926	59462.00	1071748.00	2026-06-24 18:14:00.049478+00
+927	59462.00	1071748.00	2026-06-24 18:15:00.042229+00
+928	59479.00	1072052.00	2026-06-24 18:16:00.043032+00
+929	59538.00	1073109.00	2026-06-24 18:17:00.035513+00
+930	59549.00	1073316.00	2026-06-24 18:18:00.022479+00
+931	59568.00	1073655.00	2026-06-24 18:19:00.031253+00
+932	59602.00	1074267.00	2026-06-24 18:20:00.057751+00
+933	59602.00	1074267.00	2026-06-24 18:20:00.722452+00
+934	59602.00	1074267.00	2026-06-24 18:20:08.481843+00
+935	59602.00	1074267.00	2026-06-24 18:21:00.040465+00
+936	59666.00	1075423.00	2026-06-24 18:21:00.73515+00
+937	59666.00	1075423.00	2026-06-24 18:21:08.477182+00
+938	59666.00	1075423.00	2026-06-24 18:22:00.046996+00
+939	59666.00	1075423.00	2026-06-24 18:22:00.709676+00
+940	59679.00	1075666.00	2026-06-24 18:22:08.518839+00
+941	59679.00	1075666.00	2026-06-24 18:23:00.06442+00
+942	59679.00	1075666.00	2026-06-24 18:23:00.715501+00
+943	59679.00	1075666.00	2026-06-24 18:23:08.48073+00
+944	59733.00	1076637.00	2026-06-24 18:24:00.037144+00
+945	59733.00	1076637.00	2026-06-24 18:24:00.704198+00
+946	59733.00	1076637.00	2026-06-24 18:24:08.483783+00
+947	59727.00	1076528.00	2026-06-24 18:25:00.039386+00
+948	59727.00	1076528.00	2026-06-24 18:25:00.715226+00
+949	59727.00	1076528.00	2026-06-24 18:25:08.486829+00
+950	59726.00	1076514.00	2026-06-24 18:26:00.048495+00
+951	59726.00	1076514.00	2026-06-24 18:26:00.707133+00
+952	59726.00	1076514.00	2026-06-24 18:26:08.481106+00
+953	59718.00	1076359.00	2026-06-24 18:27:00.080669+00
+954	59718.00	1076359.00	2026-06-24 18:27:00.71101+00
+955	59718.00	1076359.00	2026-06-24 18:27:08.482039+00
+956	59718.00	1076359.00	2026-06-24 18:28:00.063037+00
+957	59779.00	1077461.00	2026-06-24 18:28:00.737655+00
+958	59779.00	1077461.00	2026-06-24 18:28:08.484428+00
+959	59779.00	1077461.00	2026-06-24 18:29:00.041993+00
+960	59779.00	1077461.00	2026-06-24 18:29:00.709558+00
+961	59741.00	1076780.00	2026-06-24 18:29:08.504859+00
+962	59741.00	1076780.00	2026-06-24 18:30:00.048648+00
+963	59741.00	1076780.00	2026-06-24 18:30:00.725433+00
+964	59741.00	1076780.00	2026-06-24 18:30:08.48613+00
+965	59688.00	1075816.00	2026-06-24 18:30:49.16133+00
+966	59688.00	1075816.00	2026-06-24 18:31:00.047377+00
+967	59622.00	1074633.00	2026-06-24 18:32:23.734577+00
+968	59622.00	1074635.00	2026-06-24 18:33:23.491222+00
+\.
+
+
+--
+-- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.notifications (id, user_id, kind, title, body, unread, created_at) FROM stdin;
+33378c71-61e7-4eaa-af2a-226d3e2ff1ab	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	deposit	Lightning deposit confirmed	Your deposit of 100 sats has arrived.	f	2026-06-12 00:02:36.585467+00
+ab016a1f-8648-4dc7-a9fd-3672cfd0b3c6	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	deposit	Lightning deposit confirmed	Your deposit of 20 sats has arrived.	f	2026-06-12 04:31:19.183348+00
+3f2a0d8b-e415-40e7-b51c-a56794a5898e	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	price_protection	Savings Protected 🛡️	Bitcoin dropped 2%. UStack moved treasury funds to USD protection.	t	2026-06-24 16:41:33.133199+00
+7696dbeb-0735-4eba-9130-70c9d0f80d79	9d2b3176-90dd-490c-a0f9-5e856da87071	price_protection	Savings Protected 🛡️	Bitcoin dropped 2%. UStack moved treasury funds to USD protection.	t	2026-06-24 16:41:33.133199+00
+2ae43db1-7983-4117-98f3-6ffa596ff40e	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	deposit	Lightning deposit confirmed	Your deposit of 5 sats has arrived.	t	2026-06-24 17:07:07.235439+00
+\.
+
+
+--
+-- Data for Name: otp_codes; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.otp_codes (id, code, expires_at, used, created_at, email) FROM stdin;
+\.
+
+
+--
+-- Data for Name: price_protection; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.price_protection (id, user_id, enabled, threshold_pct, asset_state, created_at, updated_at) FROM stdin;
+1d8b8ad4-8a63-43b1-9491-d6c2f37cedfd	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	t	5	btc	2026-06-11 22:50:38.257919+00	2026-06-11 22:51:00.950445+00
+de29cea2-7b4b-4651-9bda-b80ce51d2117	9d2b3176-90dd-490c-a0f9-5e856da87071	f	20	btc	2026-06-12 06:51:58.794977+00	2026-06-12 06:51:58.794977+00
+\.
+
+
+--
+-- Data for Name: profiles; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.profiles (id, user_id, display_name, avatar_initials, avatar_color, profile_picture_url, biometric_enabled, notification_preferences, created_at, updated_at, transaction_pin_hash, transaction_pin_enabled, transaction_pin_created_at, transaction_pin_updated_at, failed_pin_attempts, transaction_lock_until) FROM stdin;
+e803c935-5738-4639-a6b3-ee02821d7820	9d2b3176-90dd-490c-a0f9-5e856da87071	ps btc	PS	btc	\N	f	{}	2026-06-12 06:51:58.790419+00	2026-06-12 06:51:58.790419+00	\N	f	\N	\N	0	\N
+bda5cc8e-d657-4cdd-9b75-d2aeb417d9db	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	pszm	PS	btc	\N	f	{}	2026-06-11 22:50:38.254402+00	2026-06-24 17:38:20.157465+00	$2b$12$5EQZmScNsWUpAgE6OtNToeQ55S3o3SbPUP7f6NDCJPSYx3FohicsC	t	2026-06-24 17:38:20.157465+00	2026-06-24 17:38:20.157465+00	0	\N
+\.
+
+
+--
+-- Data for Name: sessions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.sessions (id, user_id, refresh_token, expires_at, created_at) FROM stdin;
+f7998263-278d-4346-aefb-a2bd25d617b8	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODEyMTgyMzgsImV4cCI6MTc4MzgxMDIzOH0.ngnjeRJj8PyPZlTJE5sD1kcnbk8mtP2GOH-fBlYskuY	2026-07-11 22:50:38.267272+00	2026-06-11 22:50:38.267272+00
+8cf8f881-262d-41b2-8832-c94add6ec61c	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODEyMzg0NjksImV4cCI6MTc4MzgzMDQ2OX0.3i1Utv-AZsbPn2cMlUAF5Xu5wcfIM0hRM7hW_McirEc	2026-07-12 04:27:49.118642+00	2026-06-12 04:27:49.118642+00
+b6bd648f-1515-43ec-adba-73b0cedcc903	9d2b3176-90dd-490c-a0f9-5e856da87071	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI5ZDJiMzE3Ni05MGRkLTQ5MGMtYTBmOS01ZTg1NmRhODcwNzEiLCJpYXQiOjE3ODEyNDcxMTgsImV4cCI6MTc4MzgzOTExOH0.cArKfxigWp8wcfscX6sjmoB9LPq7g-SXhznPv6DcvF8	2026-07-12 06:51:58.803559+00	2026-06-12 06:51:58.803559+00
+57b37eea-d8a1-41c3-87fa-ebe09c5d4194	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODE0NjYxNDUsImV4cCI6MTc4NDA1ODE0NX0.44WD3PjM9A1FVf6O9VXpJAMXHTWHoS3M_y733qh8UQE	2026-07-14 19:42:25.107775+00	2026-06-14 19:42:25.107775+00
+f41f6e0c-f462-45da-a1fe-1e9a51992a08	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODE0NzIzMTksImV4cCI6MTc4NDA2NDMxOX0.Xf7991ZZRuNFx7M1_wi-GYUQL8G4U7x1X577cDF_xwg	2026-07-14 21:25:19.989788+00	2026-06-14 21:25:19.989788+00
+d15dcdaf-47b2-4b6c-9944-f571e039c3e4	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODE0NzYxMDQsImV4cCI6MTc4NDA2ODEwNH0.EN3RB6XE9udETAYPgMNmDFIqLxIU5FyOUpim7YPqJX0	2026-07-14 22:28:24.559176+00	2026-06-14 22:28:24.559176+00
+432820c3-f45b-407d-b71b-e42d23c66805	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODE0Nzk2MjYsImV4cCI6MTc4NDA3MTYyNn0.lKEtctMQk1waDkFyl_lCKMQZq0vc6wKmu9RxSbPA0QY	2026-07-14 23:27:06.710401+00	2026-06-14 23:27:06.710401+00
+99b884e2-7356-4abc-b497-dd25563788ad	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODIzMTkwNzQsImV4cCI6MTc4NDkxMTA3NH0.GCQLFB3p06Usf8wBvUXVNrnHuoWfZQZpm2MWae4TE-8	2026-07-24 16:37:54.339124+00	2026-06-24 16:37:54.339124+00
+7ceaac17-ffb1-4823-beab-ce4e645cfd21	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODIzMjA3NzIsImV4cCI6MTc4NDkxMjc3Mn0.NLpIuRt2HPa7kTLQX_nQQAiKM0LZI5K-1CsUYk3U--4	2026-07-24 17:06:12.345632+00	2026-06-24 17:06:12.345632+00
+580104b6-9ddb-4cba-9987-0f3bf38ff3c2	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODIzMjI2NjEsImV4cCI6MTc4NDkxNDY2MX0.j9yw28HUL5xVDXUYfHeOUQbkbz880EZLQiQwHT7qKU0	2026-07-24 17:37:41.788021+00	2026-06-24 17:37:41.788021+00
+4c55242c-9722-435b-8bcd-354616e0f6e1	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYTQ1ZDFiYy0wMDgxLTQ4ZTMtODRlYS1iM2IyNzBlMGEzMmQiLCJpYXQiOjE3ODIzMjM4MjMsImV4cCI6MTc4NDkxNTgyM30.fo7-Df-zxTz-sS3B16HlvQV4IuKkfduvQd0w2anzV5s	2026-07-24 17:57:03.049747+00	2026-06-24 17:57:03.049747+00
+\.
+
+
+--
+-- Data for Name: transactions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.transactions (id, user_id, vault_id, type, amount_sats, status, method, metadata, external_id, created_at, updated_at, lightning_invoice, lightning_payment_hash) FROM stdin;
+4522648f-c643-40c1-9064-fdbfa7b0b2a3	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	\N	deposit	100	confirmed	lightning	{}	\N	2026-06-11 23:57:30.643567+00	2026-06-12 00:02:36.510524+00	lnbc1u1p4zkjm2pp5sjew3a05u7zp54ffw2e333xav9wsqjlt89nwrzkjasky95yl6g2sdpqg3jhqmmnd96zqar0ypzk6etjvajkucmecqzpuxqrwzqsp58yr3wgazl5yjrvfvzel4zlzktsztfv3p3juld9f5eav5tjhkt65s9qxpqysgqr7awjpashft3kx6w0mx7078agqu3rwanw566pgrwu4xee7u0c47pt0l6dl6da5c3rkmqkvhgc4jwyxphwjx75srvkwmleqw55uj6xncq9vr8fm	84b2e8f5f4e7841a552972b318c4dd615d004beb3966e18ad2ec2c42d09fd215
+7cfb7f00-d6d3-43bf-bf04-9db5727d13ee	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	\N	deposit	20	confirmed	lightning	{}	\N	2026-06-12 04:30:36.639651+00	2026-06-12 04:31:19.05199+00	lnbc200n1p4zhzmvpp5747gl0gxwfvnvhhkuvlq8q0rr3vpr4c4n0eyhh6wpcym83qsmlcqdpqg3jhqmmnd96zqar0ypzk6etjvajkucmecqzpuxqrwzqsp5vzyc4yqzvdnswhfgwsqd9afv5fc26drfkpm0g7hu8czl9cpkw5vs9qxpqysgqav454tll8mhrc7w2sjaa2494ypwdthx463esty830frwe3x0fxw54agp4s8exuz8amdhmc6rz05wfdhratch949khmdx0x8wdca47ygpdrvslv	f57c8fbd067259365ef6e33e0381e31c5811d7159bf24bdf4e0e09b3c410dff0
+e2472806-9890-45aa-9004-22e8d4be3262	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	\N	deposit	871	confirmed	mobile_money	{"mock": true, "phone": "+260777693802", "provider": "airtel"}	\N	2026-06-14 23:58:30.174674+00	2026-06-14 23:58:30.174674+00	\N	\N
+eba5b424-e5be-4583-bd00-6ff9809f5780	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	9ccdfc20-3e4a-45c6-9bdb-afa07e4059c3	deposit	5	confirmed	lightning	{}	\N	2026-06-24 17:06:39.000326+00	2026-06-24 17:07:07.212002+00	lnbc50n1p4rcr57pp5yrada7rly8f2g3ulzccpczwwg6ycmxwv5vnh7ggeg9gkzu7zep8qdpqg3jhqmmnd96zqar0ypzk6etjvajkucmecqzpuxqrwzqsp5djt76ma3wk9sklzkera7pmy7qv044lyjfp2233yzvxh0shsnv94q9qxpqysgq3jtv6se9mkvp5kuwhey37z2gyk2r3qg4f067vdd2wq29uq99qsl8rp7uc0swu7jwl56mw6cg8unthuakf3gjl6plcezkwxlgq5kxflgqsdka39	20fadef87f21d2a4479f16301c09ce46898d99cca3277f211941516173c2c84e
+de626864-1102-44f9-9391-3540c00019cf	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	9ccdfc20-3e4a-45c6-9bdb-afa07e4059c3	deposit	187	pending	mobile_money	{"phone": "+260777693802", "provider": "mtn", "amountZmw": 2.00118237, "externalId": "ustack-deposit-1782323877219-ca45d1bc"}	\N	2026-06-24 17:57:57.220269+00	2026-06-24 17:57:57.220269+00	\N	\N
+\.
+
+
+--
+-- Data for Name: treasury_state; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.treasury_state (id, current_mode, reference_price_usd, protection_price_usd, pending_action, pending_started_at, last_transition_at, last_transition_price, btc_wallet_id, usd_wallet_id, created_at, updated_at) FROM stdin;
+1	usd	65849	64532.02	\N	\N	2026-06-24 16:41:33.124198+00	60252	\N	\N	2026-06-14 22:11:52.330641+00	2026-06-24 16:41:33.124198+00
+\.
+
+
+--
+-- Data for Name: treasury_transitions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.treasury_transitions (id, from_mode, to_mode, trigger_price, reference_price, blink_tx_id, created_at) FROM stdin;
+1	btc	usd	60252	65849	noop	2026-06-24 16:41:33.128061+00
+\.
+
+
+--
+-- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.users (id, username, email, account_status, created_at, updated_at) FROM stdin;
+ca45d1bc-0081-48e3-84ea-b3b270e0a32d	pszm	simatendepaul2@gmail.com	active	2026-06-11 22:50:38.243721+00	2026-06-11 22:50:38.243721+00
+9d2b3176-90dd-490c-a0f9-5e856da87071	ps btc	bitpalsafe@gmail.com	active	2026-06-12 06:51:58.773138+00	2026-06-12 06:51:58.773138+00
+\.
+
+
+--
+-- Data for Name: vaults; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.vaults (id, user_id, name, vault_type, emoji, accent, goal_sats, current_sats, goal_fiat, currency, locked_until, withdrawal_penalty_pct, status, streak_days, last_deposit_at, created_at, updated_at) FROM stdin;
+2514bec0-dbd0-4884-9246-c38d47a8e79a	9d2b3176-90dd-490c-a0f9-5e856da87071	Future Business	stack	🚀	teal	50000	0	\N	ZMW	\N	45	active	0	\N	2026-06-12 06:53:39.464723+00	2026-06-12 06:53:39.464723+00
+9ccdfc20-3e4a-45c6-9bdb-afa07e4059c3	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	Emergency	stack	💰	btc	50000	125	\N	ZMW	\N	45	active	1	2026-06-24 17:07:07.218848+00	2026-06-11 23:52:31.345596+00	2026-06-24 17:07:07.218848+00
+\.
+
+
+--
+-- Data for Name: wallets; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+COPY public.wallets (id, user_id, available_sats, vault_sats, created_at, updated_at) FROM stdin;
+5ed96446-0592-47ac-871b-e2fef2ebe3cb	9d2b3176-90dd-490c-a0f9-5e856da87071	0	0	2026-06-12 06:51:58.77821+00	2026-06-12 06:51:58.77821+00
+d1163680-9477-45d3-ab9c-f53c38ff2dfc	ca45d1bc-0081-48e3-84ea-b3b270e0a32d	871	125	2026-06-11 22:50:38.247976+00	2026-06-24 17:07:07.21623+00
+\.
+
+
+--
+-- Name: btc_prices_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.btc_prices_id_seq', 968, true);
+
+
+--
+-- Name: treasury_state_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.treasury_state_id_seq', 1, true);
+
+
+--
+-- Name: treasury_transitions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.treasury_transitions_id_seq', 1, true);
+
+
+--
+-- Name: activity_logs activity_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_logs
+    ADD CONSTRAINT activity_logs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: btc_prices btc_prices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.btc_prices
+    ADD CONSTRAINT btc_prices_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: otp_codes otp_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.otp_codes
+    ADD CONSTRAINT otp_codes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: price_protection price_protection_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.price_protection
+    ADD CONSTRAINT price_protection_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: price_protection price_protection_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.price_protection
+    ADD CONSTRAINT price_protection_user_id_key UNIQUE (user_id);
+
+
+--
+-- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.profiles
+    ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: profiles profiles_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.profiles
+    ADD CONSTRAINT profiles_user_id_key UNIQUE (user_id);
+
+
+--
+-- Name: sessions sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sessions
+    ADD CONSTRAINT sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sessions sessions_refresh_token_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sessions
+    ADD CONSTRAINT sessions_refresh_token_key UNIQUE (refresh_token);
+
+
+--
+-- Name: transactions transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: treasury_state treasury_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.treasury_state
+    ADD CONSTRAINT treasury_state_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: treasury_transitions treasury_transitions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.treasury_transitions
+    ADD CONSTRAINT treasury_transitions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users users_username_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_username_key UNIQUE (username);
+
+
+--
+-- Name: vaults vaults_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaults
+    ADD CONSTRAINT vaults_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: wallets wallets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT wallets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: wallets wallets_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT wallets_user_id_key UNIQUE (user_id);
+
+
+--
+-- Name: idx_activity_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activity_user ON public.activity_logs USING btree (user_id);
+
+
+--
+-- Name: idx_btc_prices_fetched; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_btc_prices_fetched ON public.btc_prices USING btree (fetched_at DESC);
+
+
+--
+-- Name: idx_notifications_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_notifications_user ON public.notifications USING btree (user_id);
+
+
+--
+-- Name: idx_otp_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_otp_email ON public.otp_codes USING btree (email);
+
+
+--
+-- Name: idx_sessions_refresh; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sessions_refresh ON public.sessions USING btree (refresh_token);
+
+
+--
+-- Name: idx_transactions_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_transactions_user ON public.transactions USING btree (user_id);
+
+
+--
+-- Name: idx_txn_payment_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_txn_payment_hash ON public.transactions USING btree (lightning_payment_hash);
+
+
+--
+-- Name: idx_vaults_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_vaults_user ON public.vaults USING btree (user_id);
+
+
+--
+-- Name: idx_wallets_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_wallets_user ON public.wallets USING btree (user_id);
+
+
+--
+-- Name: activity_logs activity_logs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_logs
+    ADD CONSTRAINT activity_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: notifications notifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: price_protection price_protection_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.price_protection
+    ADD CONSTRAINT price_protection_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: profiles profiles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.profiles
+    ADD CONSTRAINT profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sessions sessions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sessions
+    ADD CONSTRAINT sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: transactions transactions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: transactions transactions_vault_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_vault_id_fkey FOREIGN KEY (vault_id) REFERENCES public.vaults(id) ON DELETE SET NULL;
+
+
+--
+-- Name: vaults vaults_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vaults
+    ADD CONSTRAINT vaults_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: wallets wallets_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.wallets
+    ADD CONSTRAINT wallets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict C2vBzeE1geM1VPReEYKwDwYm6GZnLVBrstVv8aXc7324fklVTSHH56ErkHAjsZx
+
+
+
