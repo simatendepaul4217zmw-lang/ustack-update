@@ -118,7 +118,7 @@ export function DepositSheet({
 
       if (tab === "momo") {
         const result = await momoDeposit.mutateAsync({
-          phone: phone.startsWith("+") ? phone : `+260${phone}`,
+          phone: `260${phone.replace(/^\+?26?0?/, "")}`,
           amountSats,
           provider,
           vaultId: dest === "vault" && selectedVault ? selectedVault.id : undefined,
