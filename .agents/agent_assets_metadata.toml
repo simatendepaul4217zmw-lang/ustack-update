@@ -42,3 +42,9 @@ id = "vg_E3hbAY5woX36wnvEX2"
 uri = "file://exports/ustack_offline_reference.txt"
 type = "text"
 title = "UStack Complete Offline Copy (Reference + Database)"
+
+[[outputs]]
+id = "smNowvx9EqrEdMEvMwkIY"
+uri = "file://exports/ustack_full_export.zip"
+type = "unspecified"
+title = "UStack Full Export .zip — Reference + Full Database"
