@@ -121,7 +121,7 @@ export async function createLightningInvoice(
     body: JSON.stringify({
       query: `mutation LnInvoiceCreate($input: LnInvoiceCreateInput!) {
         lnInvoiceCreate(input: $input) {
-          invoice { paymentRequest paymentHash satoshis expiresAt }
+          invoice { paymentRequest paymentHash satoshis }
           errors { message }
         }
       }`,
