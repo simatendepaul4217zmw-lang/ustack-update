@@ -1,0 +1,301 @@
+Implement Transaction Security Layer for UStack.
+
+OVERVIEW
+
+All movement of funds inside UStack must require user authorization.
+
+No funds may be moved without explicit user approval.
+
+This applies to:
+
+* Withdrawals
+* Deposits into vaults
+* Transfers from vault to available balance
+* Vault unlocking
+* Mobile Money withdrawals
+* Lightning withdrawals
+* Move to Hardware Wallet
+* Any future fund movement feature
+
+AUTHORIZATION METHODS
+
+Support two authorization methods:
+
+1. Transaction PIN
+2. Biometric Authentication
+
+Users may enable one or both.
+
+If biometric authentication is available and enabled:
+
+Prompt fingerprint .
+
+If biometric authentication is unavailable:
+
+Require Transaction PIN.
+
+TRANSACTION PIN
+
+Create secure Transaction PIN functionality.
+
+Requirements:
+
+* 4 digits
+* Separate from login system
+* Stored using strong hashing
+* Never stored in plain text
+* Never returned by APIs
+
+Database:
+
+Add fields to profiles table:
+
+transaction_pin_hash
+transaction_pin_enabled
+transaction_pin_created_at
+transaction_pin_updated_at
+
+PIN SETUP
+
+First-time setup:
+
+User creates PIN
+↓
+Confirm PIN
+↓
+Store hashed PIN
+
+PIN CHANGE
+
+Require:
+
+Current PIN
+↓
+New PIN
+↓
+Confirm New PIN
+
+PIN RESET
+
+Require:
+
+Email OTP verification
+↓
+Create new PIN
+
+BIOMETRIC AUTHENTICATION
+
+Mobile App:
+
+Support:
+
+* Fingerprint
+
+* Device Biometrics
+
+Use Capacitor biometric plugins.
+
+Store:
+
+biometric_enabled
+
+in profiles table.
+
+Do not store biometric data.
+
+Only store device authorization state.
+
+FUND MOVEMENT RULES
+
+Before any balance-changing action:
+
+Validate authorization.
+
+Examples:
+
+Withdraw Lightning
+
+User enters invoice
+↓
+User enters PIN OR biometric
+↓
+Process withdrawal
+
+Withdraw Mobile Money
+
+User enters phone number
+↓
+User enters PIN OR biometric
+↓
+Process withdrawal
+
+Deposit Into Vault
+
+User selects vault
+↓
+User enters amount
+↓
+User enters PIN OR biometric
+↓
+Move funds
+
+Unlock Vault
+
+User requests unlock
+↓
+User enters PIN OR biometric
+↓
+Execute unlock
+
+Move To Hardware Wallet
+
+User enters address
+↓
+User enters PIN OR biometric
+↓
+Process transfer
+
+FAILED ATTEMPTS
+
+Track failed authorization attempts.
+
+Rules:
+
+5 failed PIN attempts
+↓
+Lock transactions for 30 minutes
+
+Send email notification:
+
+"Multiple failed transaction authorization attempts detected."
+
+Store:
+
+failed_pin_attempts
+transaction_lock_until
+
+AUDIT LOGGING
+
+Record:
+
+PIN Created
+
+PIN Changed
+
+PIN Reset
+
+Biometric Enabled
+
+Biometric Disabled
+
+Authorization Success
+
+Authorization Failure
+
+Withdrawal Approved
+
+Vault Transfer Approved
+
+Store in activity_logs.
+
+EMAIL NOTIFICATIONS
+
+Send email for:
+
+PIN Created
+
+PIN Changed
+
+PIN Reset
+
+Transaction Lock Triggered
+
+Large Withdrawals
+
+Example:
+
+"Your UStack account approved a withdrawal of 50,000 sats."
+
+LARGE TRANSACTION PROTECTION
+
+Additional verification required for large transactions.
+
+Threshold:
+
+100,000 sats
+
+Flow:
+
+PIN/Biometric
+↓
+Email OTP
+↓
+Execute transaction
+
+SECURITY REQUIREMENTS
+
+Never store raw PINs.
+
+Use bcrypt or Argon2 hashing.
+
+Never expose authorization data to frontend.
+
+Validate authorization server-side.
+
+Prevent brute-force attempts.
+
+Prevent replay attacks.
+
+Use secure session validation.
+
+USER SETTINGS PAGE
+
+Add Security Settings section:
+
+Transaction PIN
+
+* Set PIN
+* Change PIN
+* Reset PIN
+
+Biometric Security
+
+* Enable Fingerprint
+
+* Disable Biometrics
+
+Transaction Security Status
+
+* Protected
+* Not Configured
+
+API ENDPOINTS
+
+Create:
+
+POST /api/security/pin/create
+
+POST /api/security/pin/change
+
+POST /api/security/pin/reset
+
+POST /api/security/authorize
+
+GET /api/security/status
+
+TECHNICAL REQUIREMENTS
+
+Use TypeScript.
+
+Integrate with:
+
+* wallets
+* vaults
+* transactions
+* profiles
+* activity_logs
+* notifications
+
+No fund movement may execute unless authorization succeeds.
+
+This rule must be enforced centrally through a TransactionAuthorizationService used by all balance-changing operations.
