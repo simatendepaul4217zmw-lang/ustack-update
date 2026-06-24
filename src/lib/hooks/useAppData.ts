@@ -4,7 +4,7 @@ import { getWallet } from "@/lib/api/wallet.functions";
 import { getVaults, createVault, depositToVault, withdrawFromVault } from "@/lib/api/vault.functions";
 import { getActivity, getNotifications, markNotificationsRead } from "@/lib/api/activity.functions";
 import { getBtcPrice } from "@/lib/api/price.functions";
-import { createInvoice, sendPayment, sendOnChainPayment, estimateOnChainFee, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus } from "@/lib/api/lightning.functions";
+import { createInvoice, sendPayment, sendOnChainPayment, estimateOnChainFee, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus, confirmMockInvoice } from "@/lib/api/lightning.functions";
 import { updateProfile } from "@/lib/api/auth.functions";
 import { getPriceProtection, updatePriceProtection } from "@/lib/api/priceprotection.functions";
 import { getSecurityStatus, setupPin, changePin, verifyPin, setBiometric } from "@/lib/api/security.functions";
@@ -192,6 +192,30 @@ export function useMobileMoneyPayout() {
       qc.invalidateQueries({ queryKey: ["wallet"] });
       qc.invalidateQueries({ queryKey: ["activity"] });
     },
+  });
+}
+
+export function useCheckMomoStatus(lipilaTransactionId: string | null) {
+  const { token, isAuthenticated } = useAuth();
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["momoStatus", lipilaTransactionId],
+    queryFn: async () => {
+      const result = await checkMomoStatus({ data: { token: token!, lipilaTransactionId: lipilaTransactionId! } });
+      if (result.status === "SUCCESS") {
+        qc.invalidateQueries({ queryKey: ["wallet"] });
+        qc.invalidateQueries({ queryKey: ["vaults"] });
+        qc.invalidateQueries({ queryKey: ["activity"] });
+        qc.invalidateQueries({ queryKey: ["notifications"] });
+      }
+      return result;
+    },
+    enabled: !!token && isAuthenticated && !!lipilaTransactionId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "SUCCESS" || status === "FAILED" ? false : 5000;
+    },
+    gcTime: 0,
   });
 }
 
