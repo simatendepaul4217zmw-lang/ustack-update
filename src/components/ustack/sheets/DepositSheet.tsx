@@ -8,7 +8,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Sheet } from "./Sheet";
 import { fmtSats, satsToZMW, BTC_PRICE_ZMW, type Vault } from "@/lib/ustack-data";
 import { useCurrency } from "@/lib/currency-context";
-import { useVaults, useMobileMoneyDeposit, useCreateInvoice, useCheckInvoiceStatus, useVerifyPin, useSecurityStatus } from "@/lib/hooks/useAppData";
+import { useVaults, useMobileMoneyDeposit, useCreateInvoice, useCheckInvoiceStatus, useCheckMomoStatus, useVerifyPin, useSecurityStatus } from "@/lib/hooks/useAppData";
 import { useBtcPrice } from "@/lib/hooks/useAppData";
 import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
 import { PinPad } from "../PinPad";
@@ -53,6 +53,7 @@ export function DepositSheet({
   const [error, setError] = useState("");
   const [authPin, setAuthPin] = useState("");
   const [authError, setAuthError] = useState("");
+  const [momoTxId, setMomoTxId] = useState<string | null>(null);
 
   const { data: vaults = [] } = useVaults();
   const { data: priceData } = useBtcPrice();
@@ -64,6 +65,7 @@ export function DepositSheet({
   const momoDeposit = useMobileMoneyDeposit();
   const createInvoice = useCreateInvoice();
   const { data: invoiceStatus } = useCheckInvoiceStatus(invoiceData?.paymentHash ?? null);
+  const { data: momoStatus } = useCheckMomoStatus(momoTxId);
 
   // Auto-advance to done when invoice is confirmed
   useEffect(() => {
@@ -71,6 +73,13 @@ export function DepositSheet({
       setStep("done");
     }
   }, [invoiceStatus?.status, step]);
+
+  // Auto-advance to done when MoMo payment is confirmed
+  useEffect(() => {
+    if (momoStatus?.status === "SUCCESS" && step === "processing") {
+      setStep("done");
+    }
+  }, [momoStatus?.status, step]);
 
   useEffect(() => {
     if (open && vaultContext) {
@@ -86,15 +95,20 @@ export function DepositSheet({
     setStep("dest"); setDest("balance"); setSelectedVault(null);
     setTab("momo"); setPhone(""); setAmount("1000"); setLnAmount("");
     setInvoiceData(null); setWalletPickerOpen(false); setError("");
-    setAuthPin(""); setAuthError("");
+    setAuthPin(""); setAuthError(""); setMomoTxId(null);
   };
 
   const handleAuthComplete = async (pin: string) => {
     setAuthError("");
     try {
       await verifyPin.mutateAsync({ pin });
-      setStep("method");
-      setTimeout(() => generateInvoiceNow(), 50);
+      if (tab === "momo") {
+        setStep("method");
+        setTimeout(() => confirm(), 50);
+      } else {
+        setStep("method");
+        setTimeout(() => generateInvoiceNow(), 50);
+      }
     } catch (e: unknown) {
       setAuthError(e instanceof Error ? e.message : "Incorrect PIN");
       setAuthPin("");
@@ -125,12 +139,19 @@ export function DepositSheet({
       const amountSats = Math.round((zmwAmount / priceZmw) * 100_000_000);
 
       if (tab === "momo") {
-        await momoDeposit.mutateAsync({
-          phone: `+260${phone}`,
+        const result = await momoDeposit.mutateAsync({
+          phone: phone.startsWith("+") ? phone : `+260${phone}`,
           amountSats,
           provider,
           vaultId: dest === "vault" && selectedVault ? selectedVault.id : undefined,
         });
+        if (result.mock || !result.pending) {
+          setStep("done");
+        } else {
+          // pending — set transaction ID for polling; stay on "processing"
+          setMomoTxId(result.transactionId ?? null);
+        }
+        return;
       }
       setStep("done");
     } catch (e: unknown) {
@@ -269,24 +290,80 @@ export function DepositSheet({
 
             <AnimatePresence mode="wait">
               {tab === "momo" ? (
-                <motion.div key="momo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center text-center gap-4 py-6">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                    <Smartphone className="w-8 h-8 text-muted-foreground" />
-                  </div>
+                <motion.div key="momo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
+                  {/* Provider picker */}
                   <div>
-                    <div className="text-base font-semibold">Mobile Money Coming Soon</div>
-                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
-                      We are working on mobile money support. Airtel Money, MTN MoMo, and Zamtel Kwacha deposits will be available very soon.
-                    </p>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Network</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {PROVIDERS.map((p) => (
+                        <button key={p.value} onClick={() => setProvider(p.value)} className={`py-2.5 rounded-xl text-sm font-medium transition border ${provider === p.value ? "bg-primary text-primary-foreground border-primary" : "bg-white/5 text-muted-foreground border-white/8 hover:border-white/20"}`}>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="w-full rounded-2xl bg-white/5 border border-white/8 p-4 flex flex-col gap-2 text-sm text-muted-foreground text-left">
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" /> Airtel Money</div>
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" /> MTN MoMo</div>
-                    <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" /> Zamtel Kwacha</div>
+
+                  {/* Phone number */}
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Phone Number</div>
+                    <div className="rounded-2xl glass p-4 flex items-center gap-3">
+                      <span className="text-sm text-muted-foreground shrink-0 font-mono">+260</span>
+                      <input
+                        inputMode="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                        placeholder="97 123 4567"
+                        className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50 font-mono"
+                      />
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">In the meantime, use Lightning to add sats instantly.</p>
-                  <button onClick={() => setTab("lightning")} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
-                    Use Lightning instead
+
+                  {/* Amount */}
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Amount (ZMW)</div>
+                    <div className="rounded-2xl glass p-5 flex items-center justify-center gap-2">
+                      <span className="text-lg text-muted-foreground">K</span>
+                      <input
+                        inputMode="numeric"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
+                        className="bg-transparent text-3xl font-semibold text-center tabular-nums focus:outline-none w-36"
+                        placeholder="0"
+                      />
+                    </div>
+                    {Number(amount) > 0 && (
+                      <div className="mt-1 text-center text-xs font-medium text-foreground/70 tabular-nums">
+                        ≈ {Math.round((Number(amount) / priceZmw) * 100_000_000).toLocaleString()} sats
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-3">
+                      {QUICK_AMOUNTS.map((q) => (
+                        <button key={q} onClick={() => setAmount(q)} className={`flex-1 py-1.5 rounded-xl text-xs font-medium border transition ${amount === q ? "bg-primary/20 border-primary/40 text-primary" : "bg-white/5 border-white/8 text-muted-foreground hover:border-white/20"}`}>
+                          K{q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {error && <p className="text-sm text-destructive text-center">{error}</p>}
+
+                  <div className="rounded-xl bg-white/5 border border-white/8 px-4 py-3 flex items-start gap-2">
+                    <Smartphone className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">You'll receive a USSD prompt on your phone. Approve it to complete the deposit.</p>
+                  </div>
+
+                  <button
+                    disabled={!canConfirm() || momoDeposit.isPending}
+                    onClick={() => {
+                      if (security?.pinEnabled || security?.biometricEnabled) {
+                        setAuthPin(""); setAuthError(""); setStep("auth");
+                      } else {
+                        confirm();
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
+                  >
+                    {momoDeposit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Smartphone className="w-4 h-4" /> Send USSD Prompt</>}
                   </button>
                 </motion.div>
               ) : (
@@ -379,9 +456,20 @@ export function DepositSheet({
         {/* Processing */}
         {step === "processing" && (
           <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <div className="py-16 flex flex-col items-center gap-4">
+            <div className="py-12 flex flex-col items-center gap-5">
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }} className="w-12 h-12 rounded-full border-4 border-white/10 border-t-primary" />
-              <div className="text-sm text-muted-foreground">Adding your sats...</div>
+              {tab === "momo" && momoTxId ? (
+                <>
+                  <div className="text-sm font-semibold text-center">Check your phone</div>
+                  <p className="text-xs text-muted-foreground text-center max-w-[220px]">Approve the USSD prompt on your phone to complete the deposit.</p>
+                  <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.6, repeat: Infinity }} className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    Waiting for confirmation…
+                  </motion.div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">Adding your sats...</div>
+              )}
             </div>
           </motion.div>
         )}

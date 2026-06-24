@@ -8,7 +8,7 @@ import {
 import { Sheet } from "./Sheet";
 import { fmtSats, type Vault } from "@/lib/ustack-data";
 import { useCurrency } from "@/lib/currency-context";
-import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee, useBtcPrice, useVerifyPin, useSecurityStatus } from "@/lib/hooks/useAppData";
+import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee, useBtcPrice, useVerifyPin, useSecurityStatus, useMobileMoneyPayout } from "@/lib/hooks/useAppData";
 import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
 import { PinPad } from "../PinPad";
 
@@ -48,6 +48,7 @@ export function WithdrawSheet({
   const withdrawFromVault = useWithdrawFromVault();
   const sendPayment = useSendPayment();
   const sendOnChain = useSendOnChainPayment();
+  const momoWithdraw = useMobileMoneyPayout();
   const feeQuery = useEstimateOnChainFee(onchainAddress, Number(amount) || 0);
   const { data: security } = useSecurityStatus();
   const verifyPin = useVerifyPin();
@@ -144,6 +145,9 @@ export function WithdrawSheet({
     return true;
   };
 
+  const providerKey = (label: string): "airtel" | "mtn" | "zamtel" =>
+    label === "Airtel" ? "airtel" : label === "MTN MoMo" ? "mtn" : "zamtel";
+
   const handleWithdraw = async () => {
     setError("");
     try {
@@ -154,7 +158,11 @@ export function WithdrawSheet({
       } else if (source === "balance" && method === "onchain") {
         await sendOnChain.mutateAsync({ address: onchainAddress.trim(), amountSats: Number(amount) });
       } else if (source === "balance" && method === "momo") {
-        await sendPayment.mutateAsync({ paymentRequest: `momo:${phone.trim()}`, amountSats: Number(amount) });
+        await momoWithdraw.mutateAsync({
+          phone: phone.startsWith("+") ? phone : `+260${phone}`,
+          amountSats: Number(amount),
+          provider: providerKey(provider),
+        });
       }
       setStep("done");
     } catch (e: unknown) {
@@ -162,7 +170,7 @@ export function WithdrawSheet({
     }
   };
 
-  const isPending = withdrawFromVault.isPending || sendPayment.isPending || sendOnChain.isPending;
+  const isPending = withdrawFromVault.isPending || sendPayment.isPending || sendOnChain.isPending || momoWithdraw.isPending;
 
   const methodLabel = method === "lightning" ? "Lightning" : method === "onchain" ? "On-chain" : "Mobile Money";
 
@@ -315,19 +323,52 @@ export function WithdrawSheet({
               )}
 
               {method === "momo" && (
-                <motion.div key="momo-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center text-center gap-4 py-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-                    <Smartphone className="w-8 h-8 text-muted-foreground" />
-                  </div>
+                <motion.div key="momo-fields" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-4">
+                  {/* Provider picker */}
                   <div>
-                    <div className="text-base font-semibold">Mobile Money Coming Soon</div>
-                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed max-w-xs mx-auto">
-                      We are working on mobile money support. Airtel, MTN MoMo, and Zamtel Kwacha withdrawals will be available very soon.
-                    </p>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Network</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {PROVIDERS.map((p) => (
+                        <button key={p} onClick={() => setProvider(p)} className={`py-2.5 rounded-xl text-sm font-medium transition border ${provider === p ? "bg-primary text-primary-foreground border-primary" : "bg-white/5 text-muted-foreground border-white/8 hover:border-white/20"}`}>
+                          {p}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">Use Lightning or On-chain to transfer your sats for now.</p>
-                  <button onClick={() => setMethod("lightning")} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
-                    Use Lightning instead
+
+                  {/* Phone number */}
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-2">Phone Number</div>
+                    <div className="rounded-2xl glass p-4 flex items-center gap-3">
+                      <span className="text-sm text-muted-foreground shrink-0 font-mono">+260</span>
+                      <input
+                        inputMode="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                        placeholder="97 123 4567"
+                        className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/50 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <AmountField amount={amount} setAmount={setAmount} maxAmount={maxAmount} />
+
+                  {priceZmw && Number(amount) > 0 && (
+                    <div className="rounded-xl bg-white/5 border border-white/8 px-4 py-3 text-xs text-muted-foreground flex items-center justify-between">
+                      <span>You receive approximately</span>
+                      <span className="font-semibold text-foreground">K{((Number(amount) / 100_000_000) * priceZmw).toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  {isEarly && <EarlyWarningBadge pct={pct} penaltyPct={penaltyPct} />}
+                  {error && <p className="text-sm text-destructive text-center">{error}</p>}
+
+                  <button
+                    disabled={!canContinue() || isPending}
+                    onClick={() => requireAuth(isEarly ? "warning" : "withdraw")}
+                    className={`w-full font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40 flex items-center justify-center gap-2 ${isEarly ? "bg-[oklch(0.73_0.19_55)]/20 text-[oklch(0.85_0.15_55)] border border-[oklch(0.73_0.19_55)]/30" : "bg-primary text-primary-foreground"}`}
+                  >
+                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : isEarly ? `Tap Out (${penaltyPct}% fee)` : <><Smartphone className="w-4 h-4" /> Send to Mobile Money</>}
                   </button>
                 </motion.div>
               )}
