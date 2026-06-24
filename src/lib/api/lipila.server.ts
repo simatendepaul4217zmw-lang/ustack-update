@@ -47,23 +47,24 @@ export async function requestPayment(req: LipilaPaymentRequest): Promise<LipilaT
     }),
   });
 
-  const json = await res.json() as {
+  const text = await res.text();
+  const json = text ? JSON.parse(text) as {
     status?: string;
     message?: string;
     transactionId?: string;
     externalId?: string;
     error?: string;
-  };
+  } : {};
 
-  if (!res.ok || json.status === "error") {
-    throw new Error(json.message ?? json.error ?? `Lipila request failed (${res.status})`);
+  if (!res.ok || (json as { status?: string }).status === "error") {
+    throw new Error((json as { message?: string; error?: string }).message ?? (json as { error?: string }).error ?? `Lipila request failed (${res.status})`);
   }
 
   return {
-    transactionId: json.transactionId ?? req.externalId,
-    externalId: json.externalId ?? req.externalId,
+    transactionId: (json as { transactionId?: string }).transactionId ?? req.externalId,
+    externalId: (json as { externalId?: string }).externalId ?? req.externalId,
     status: "PENDING",
-    message: json.message ?? "Payment request sent — check your phone for the USSD prompt",
+    message: (json as { message?: string }).message ?? "Payment request sent — check your phone for the USSD prompt",
   };
 }
 
@@ -89,23 +90,24 @@ export async function disburseFunds(req: LipilaPaymentRequest): Promise<LipilaTr
     }),
   });
 
-  const json = await res.json() as {
+  const text2 = await res.text();
+  const json2 = text2 ? JSON.parse(text2) as {
     status?: string;
     message?: string;
     transactionId?: string;
     externalId?: string;
     error?: string;
-  };
+  } : {};
 
-  if (!res.ok || json.status === "error") {
-    throw new Error(json.message ?? json.error ?? `Lipila disbursement failed (${res.status})`);
+  if (!res.ok || (json2 as { status?: string }).status === "error") {
+    throw new Error((json2 as { message?: string }).message ?? (json2 as { error?: string }).error ?? `Lipila disbursement failed (${res.status})`);
   }
 
   return {
-    transactionId: json.transactionId ?? req.externalId,
-    externalId: json.externalId ?? req.externalId,
+    transactionId: (json2 as { transactionId?: string }).transactionId ?? req.externalId,
+    externalId: (json2 as { externalId?: string }).externalId ?? req.externalId,
     status: "PENDING",
-    message: json.message ?? "Disbursement initiated",
+    message: (json2 as { message?: string }).message ?? "Disbursement initiated",
   };
 }
 
@@ -119,14 +121,15 @@ export async function getLipilaStatus(transactionId: string): Promise<LipilaStat
     },
   });
 
-  const json = await res.json() as {
+  const text3 = await res.text();
+  const json = text3 ? JSON.parse(text3) as {
     status?: string;
     transactionStatus?: string;
     amount?: number;
     currency?: string;
     phoneNumber?: string;
     accountNumber?: string;
-  };
+  } : {};
 
   return {
     transactionId,
