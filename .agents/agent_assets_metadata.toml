@@ -24,3 +24,9 @@ id = "iFpuf0mZN-GO6INaL1PuP"
 uri = "file://exports/ustack_complete_export.tar.gz"
 type = "unspecified"
 title = "UStack Complete Export — all backend, DB + env reference"
+
+[[outputs]]
+id = "cfo3e2qHZlqOVnS-v2VBl"
+uri = "file://exports/ustack_database_full.sql.txt"
+type = "text"
+title = "UStack Database — all 13 tables, all data (fresh dump)"
