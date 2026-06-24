@@ -47,3 +47,29 @@ export async function hapticWarning() {
   const { Haptics, NotificationType } = await import("@capacitor/haptics");
   await Haptics.notification({ type: NotificationType.Warning });
 }
+
+export async function tryBiometricAuth(reason = "Unlock UStack"): Promise<boolean> {
+  if (!isNative) return false;
+  try {
+    const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
+    await BiometricAuth.authenticate({
+      reason,
+      cancelTitle: "Use PIN instead",
+      allowDeviceCredential: false,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function isBiometricAvailable(): Promise<boolean> {
+  if (!isNative) return false;
+  try {
+    const { BiometricAuth, BiometryType } = await import("@aparajita/capacitor-biometric-auth");
+    const result = await BiometricAuth.checkBiometry();
+    return result.isAvailable && result.biometryType !== BiometryType.none;
+  } catch {
+    return false;
+  }
+}
