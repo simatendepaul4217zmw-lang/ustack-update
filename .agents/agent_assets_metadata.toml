@@ -6,3 +6,15 @@ id = "t1D4z25W_HcjRIeaLc_AR"
 uri = "file://ustack-debug.tar.gz"
 type = "unspecified"
 title = "UStack Android APK (debug) — extract to get ustack-debug.apk"
+
+[[outputs]]
+id = "-4OB_mF3ElxMlWAuPdFmP"
+uri = "file://exports/ustack_database.sql.txt"
+type = "text"
+title = "UStack Database — full schema + data (.sql as .txt)"
+
+[[outputs]]
+id = "Le1YvfSi61AL8N5buTznD"
+uri = "file://exports/ustack_full_export.tar.gz"
+type = "unspecified"
+title = "UStack Full Export — database + all API source files"
