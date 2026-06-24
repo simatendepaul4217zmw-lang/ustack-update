@@ -326,9 +326,24 @@ export async function getLightningInvoiceStatus(
 
   const json = await res.json() as {
     data?: { lnInvoicePaymentStatus?: { status: string; errors?: { message: string }[] } };
+    errors?: { message: string }[];
   };
 
-  const status = json.data?.lnInvoicePaymentStatus?.status ?? "PENDING";
+  console.log("[blink] lnInvoicePaymentStatus raw response:", JSON.stringify(json));
+
+  if (json.errors?.length) {
+    console.error("[blink] lnInvoicePaymentStatus API error:", json.errors[0].message);
+    return "PENDING";
+  }
+
+  const payload = json.data?.lnInvoicePaymentStatus;
+  if (payload?.errors?.length) {
+    console.error("[blink] lnInvoicePaymentStatus field error:", payload.errors[0].message);
+    return "PENDING";
+  }
+
+  const status = payload?.status ?? "PENDING";
+  console.log("[blink] invoice status:", status);
   if (status === "PAID") return "PAID";
   if (status === "EXPIRED") return "EXPIRED";
   return "PENDING";

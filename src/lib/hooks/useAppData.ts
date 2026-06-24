@@ -225,6 +225,7 @@ export function useCheckInvoiceStatus(paymentHash: string | null) {
       const result = await checkInvoiceStatus({ data: { token: token!, paymentHash: paymentHash! } });
       if (result.status === "confirmed") {
         qc.invalidateQueries({ queryKey: ["wallet"] });
+        qc.invalidateQueries({ queryKey: ["vaults"] });
         qc.invalidateQueries({ queryKey: ["activity"] });
         qc.invalidateQueries({ queryKey: ["notifications"] });
       }
