@@ -13,7 +13,7 @@ export function getServerConfig() {
     mockBlink: !process.env.BLINK_API_KEY,
     // Lipila (Mobile Money)
     lipilaApiKey: process.env.LIPILA_API_KEY,
-    lipilaBaseUrl: process.env.LIPILA_BASE_URL || "https://blaze.lipila.dev",
+    lipilaBaseUrl: process.env.LIPILA_BASE_URL || "https://blz.lipila.io",
     mockLipila: !process.env.LIPILA_API_KEY,
     lipilaWebhookSecret: process.env.LIPILA_WEBHOOK_SECRET,
     // CoinGecko

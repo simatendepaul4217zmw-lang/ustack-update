@@ -105,8 +105,10 @@ export async function handleBlinkWebhook(request: Request): Promise<Response> {
 // ─── Lipila webhook ───────────────────────────────────────────────────────────
 
 interface LipilaWebhookPayload {
-  transactionId?: string;
-  externalId?: string;
+  identifier?: string;      // new Lipila API field
+  referenceId?: string;     // new Lipila API field
+  transactionId?: string;   // legacy fallback
+  externalId?: string;      // legacy fallback
   status?: string;
   transactionStatus?: string;
 }
@@ -136,11 +138,12 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
   }
 
   const rawStatus = (body.transactionStatus ?? body.status ?? "").toUpperCase();
-  const lipilaTransactionId = body.transactionId;
-  const externalId = body.externalId;
+  // Support both new API fields (identifier/referenceId) and legacy fields
+  const lipilaTransactionId = body.identifier ?? body.transactionId;
+  const externalId = body.referenceId ?? body.externalId;
 
   if (!lipilaTransactionId && !externalId) {
-    return json({ error: "Missing transactionId" }, 400);
+    return json({ error: "Missing identifier/transactionId" }, 400);
   }
 
   const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; type: string; vault_id: string | null }>(

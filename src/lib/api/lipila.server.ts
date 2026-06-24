@@ -1,5 +1,11 @@
 import { getServerConfig } from "../config.server";
 
+// Lipila API base URLs (verified June 2026)
+// Collections (deposits):  https://blz.lipila.io  — auth: X-API-Key header
+// Reporting (status):      https://api.lipila.io  — auth: Authorization: Bearer
+const COLLECTION_BASE = "https://blz.lipila.io";
+const REPORTING_BASE  = "https://api.lipila.io";
+
 export interface LipilaPaymentRequest {
   phone: string;
   amountZmw: number;
@@ -10,8 +16,8 @@ export interface LipilaPaymentRequest {
 }
 
 export interface LipilaTransactionResult {
-  transactionId: string;
-  externalId: string;
+  transactionId: string;  // Lipila's `identifier` field
+  externalId: string;     // Lipila's `referenceId` field
   status: "PENDING" | "SUCCESS" | "FAILED";
   message: string;
 }
@@ -27,114 +33,112 @@ export interface LipilaStatusResult {
 // Request a mobile money collection (customer pays us)
 export async function requestPayment(req: LipilaPaymentRequest): Promise<LipilaTransactionResult> {
   const config = getServerConfig();
+  const phone = req.phone.replace(/^\+/, "");
 
-  const res = await fetch(`${config.lipilaBaseUrl}/api/v1/payments/request`, {
+  const res = await fetch(`${COLLECTION_BASE}/api/v1/collections/mobile-money`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.lipilaApiKey}`,
+      "X-API-Key": config.lipilaApiKey!,
     },
     body: JSON.stringify({
       amount: Number(req.amountZmw.toFixed(2)),
       currency: "ZMW",
-      phoneNumber: req.phone.replace(/^\+/, ""),
-      accountNumber: req.phone.replace(/^\+/, ""),
+      phoneNumber: phone,
+      accountNumber: phone,
       narration: req.narration ?? "UStack Bitcoin deposit",
-      externalId: req.externalId,
-      fullName: req.fullName,
-      email: req.email,
+      referenceId: req.externalId,
     }),
   });
 
   const text = await res.text();
-  const json = text ? JSON.parse(text) as {
-    status?: string;
-    message?: string;
-    transactionId?: string;
-    externalId?: string;
-    error?: string;
-  } : {};
+  let json: Record<string, unknown> = {};
+  try { if (text) json = JSON.parse(text) as Record<string, unknown>; } catch { /* empty */ }
 
-  if (!res.ok || (json as { status?: string }).status === "error") {
-    throw new Error((json as { message?: string; error?: string }).message ?? (json as { error?: string }).error ?? `Lipila request failed (${res.status})`);
+  if (!res.ok) {
+    const errors = json.errors as Record<string, string[]> | undefined;
+    const detail = errors ? Object.values(errors).flat().join("; ") : undefined;
+    throw new Error(detail ?? (json.message as string) ?? (json.error as string) ?? `Lipila request failed (${res.status})`);
   }
 
   return {
-    transactionId: (json as { transactionId?: string }).transactionId ?? req.externalId,
-    externalId: (json as { externalId?: string }).externalId ?? req.externalId,
+    transactionId: (json.identifier as string) ?? req.externalId,
+    externalId:    (json.referenceId as string) ?? req.externalId,
     status: "PENDING",
-    message: (json as { message?: string }).message ?? "Payment request sent — check your phone for the USSD prompt",
+    message: "Payment request sent — check your phone for the USSD prompt",
   };
 }
 
 // Disburse funds to a mobile money account (we pay customer)
 export async function disburseFunds(req: LipilaPaymentRequest): Promise<LipilaTransactionResult> {
   const config = getServerConfig();
+  const phone = req.phone.replace(/^\+/, "");
 
-  const res = await fetch(`${config.lipilaBaseUrl}/transactions/mobile-money/disburse`, {
+  const res = await fetch(`${COLLECTION_BASE}/api/v1/disbursements/mobile-money`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${config.lipilaApiKey}`,
+      "X-API-Key": config.lipilaApiKey!,
     },
     body: JSON.stringify({
+      amount: Number(req.amountZmw.toFixed(2)),
       currency: "ZMW",
-      amount: req.amountZmw,
-      accountNumber: req.phone,
-      phoneNumber: req.phone,
-      fullName: req.fullName,
-      email: req.email,
-      externalId: req.externalId,
+      phoneNumber: phone,
+      accountNumber: phone,
       narration: req.narration ?? "UStack payout",
+      referenceId: req.externalId,
     }),
   });
 
-  const text2 = await res.text();
-  const json2 = text2 ? JSON.parse(text2) as {
-    status?: string;
-    message?: string;
-    transactionId?: string;
-    externalId?: string;
-    error?: string;
-  } : {};
+  const text = await res.text();
+  let json: Record<string, unknown> = {};
+  try { if (text) json = JSON.parse(text) as Record<string, unknown>; } catch { /* empty */ }
 
-  if (!res.ok || (json2 as { status?: string }).status === "error") {
-    throw new Error((json2 as { message?: string }).message ?? (json2 as { error?: string }).error ?? `Lipila disbursement failed (${res.status})`);
+  if (!res.ok) {
+    const errors = json.errors as Record<string, string[]> | undefined;
+    const detail = errors ? Object.values(errors).flat().join("; ") : undefined;
+    throw new Error(detail ?? (json.message as string) ?? (json.error as string) ?? `Lipila disbursement failed (${res.status})`);
   }
 
   return {
-    transactionId: (json2 as { transactionId?: string }).transactionId ?? req.externalId,
-    externalId: (json2 as { externalId?: string }).externalId ?? req.externalId,
+    transactionId: (json.identifier as string) ?? req.externalId,
+    externalId:    (json.referenceId as string) ?? req.externalId,
     status: "PENDING",
-    message: (json2 as { message?: string }).message ?? "Disbursement initiated",
+    message: "Disbursement initiated",
   };
 }
 
-// Poll a transaction status by transactionId
+// Poll transaction status via reporting API
 export async function getLipilaStatus(transactionId: string): Promise<LipilaStatusResult> {
   const config = getServerConfig();
 
-  const res = await fetch(`${config.lipilaBaseUrl}/api/v1/transactions/${transactionId}`, {
-    headers: {
-      Authorization: `Bearer ${config.lipilaApiKey}`,
-    },
+  // Try to find by identifier in the reporting API
+  const res = await fetch(`${REPORTING_BASE}/transactions?pageSize=1&search=${encodeURIComponent(transactionId)}`, {
+    headers: { Authorization: `Bearer ${config.lipilaApiKey}` },
   });
 
-  const text3 = await res.text();
-  const json = text3 ? JSON.parse(text3) as {
-    status?: string;
-    transactionStatus?: string;
-    amount?: number;
-    currency?: string;
-    phoneNumber?: string;
-    accountNumber?: string;
-  } : {};
+  const text = await res.text();
+  let json: Record<string, unknown> = {};
+  try { if (text) json = JSON.parse(text) as Record<string, unknown>; } catch { /* empty */ }
+
+  const rows = (json.data as Record<string, unknown>[]) ?? [];
+  const row = rows.find((r) =>
+    r.xReferenceId === transactionId ||
+    r.transactionReferenceId === transactionId ||
+    r.externalId === transactionId
+  ) ?? rows[0];
+
+  const rawStatus = ((row?.status as string) ?? "Pending").toUpperCase();
+  const mapped: LipilaStatusResult["status"] =
+    rawStatus === "SUCCESSFUL" || rawStatus === "SUCCESS" ? "SUCCESS"
+    : rawStatus === "FAILED" || rawStatus === "CANCELLED" ? "FAILED"
+    : "PENDING";
 
   return {
     transactionId,
-    status: (json.transactionStatus ?? json.status ?? "PENDING") as LipilaStatusResult["status"],
-    amount: json.amount ?? 0,
-    currency: json.currency ?? "ZMW",
-    phoneNumber: json.phoneNumber ?? json.accountNumber ?? "",
+    status: mapped,
+    amount:      (row?.amount as number) ?? 0,
+    currency:    "ZMW",
+    phoneNumber: (row?.accountNumber as string) ?? "",
   };
 }
