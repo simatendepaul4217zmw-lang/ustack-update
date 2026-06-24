@@ -18,7 +18,7 @@ export function CreateVaultSheet({ open, onClose, onDeposit }: { open: boolean; 
   const [type, setType] = useState<"hodl" | "stack">("stack");
   const [name, setName] = useState("");
   const [icon, setIcon] = useState("Target");
-  const [accent, setAccent] = useState("btc");
+  const [accent, setAccent] = useState<"btc" | "purple" | "teal" | "blue" | "rose" | "gold">("btc");
   const [goal, setGoal] = useState(1_000_000);
   const [lockMonths, setLockMonths] = useState(6);
   const [customMonths, setCustomMonths] = useState("");

@@ -14,7 +14,9 @@ export const ACCENT_COLORS: Record<string, string> = {
   gold:   "oklch(0.82 0.16 85)",
 };
 
-export const VAULT_ACCENTS: { value: string; label: string }[] = [
+export type VaultAccent = "btc" | "purple" | "teal" | "blue" | "rose" | "gold";
+
+export const VAULT_ACCENTS: { value: VaultAccent; label: string }[] = [
   { value: "btc",    label: "Orange" },
   { value: "purple", label: "Purple" },
   { value: "teal",   label: "Teal"   },
