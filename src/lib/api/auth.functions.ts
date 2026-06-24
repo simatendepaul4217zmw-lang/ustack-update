@@ -9,6 +9,9 @@ export const requestOtp = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const email = data.email.trim().toLowerCase();
 
+    // Purge all expired or used OTPs globally on every request (housekeeping)
+    await execute(`DELETE FROM otp_codes WHERE expires_at < NOW() OR used = true`, []);
+
     const recent = await query<{ count: string }>(
       `SELECT COUNT(*) FROM otp_codes WHERE email=$1 AND created_at > NOW() - INTERVAL '1 hour'`,
       [email]
@@ -17,7 +20,8 @@ export const requestOtp = createServerFn({ method: "POST" })
       throw new Error("Too many OTP requests. Try again in an hour.");
     }
 
-    await execute(`UPDATE otp_codes SET used=true WHERE email=$1 AND used=false`, [email]);
+    // Delete any pending unused OTPs for this email before issuing a new one
+    await execute(`DELETE FROM otp_codes WHERE email=$1`, [email]);
 
     const code = generateOtp();
     await execute(
@@ -41,7 +45,8 @@ export const verifyOtp = createServerFn({ method: "POST" })
     );
     if (!otp || otp.code !== data.code) throw new Error("Invalid or expired code.");
 
-    await execute(`UPDATE otp_codes SET used=true WHERE id=$1`, [otp.id]);
+    // Delete immediately — OTPs are single-use, no reason to keep them
+    await execute(`DELETE FROM otp_codes WHERE email=$1`, [email]);
 
     let user = await queryOne<{ id: string; username: string; email: string }>(
       `SELECT id, username, email FROM users WHERE email=$1`,
