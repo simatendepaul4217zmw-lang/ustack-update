@@ -1,0 +1,213 @@
+Deposit Flow (Mobile Money → Sats)
+User
+↓
+Tap Add Funds
+↓
+Enter K100
+↓
+Select MTN/Airtel/Zamtel
+↓
+Enter PIN/Fingerprint
+↓
+Lipila Collection Request
+↓
+Mobile Money Prompt
+↓
+User Enters MoMo PIN
+↓
+Lipila Confirms Payment
+↓
+Webhook Received
+↓
+Convert ZMW → Sats
+↓
+Credit UStack Wallet
+
+Example:
+
+K100 deposited
+
+BTC Price:
+K3,000,000/BTC
+
+Result:
+~3,333 sats
+
+Credit:
+3,333 sats
+
+The user never sees Lipila directly. They just see:
+
+K100
+↓
+3,333 sats added
+Withdrawal Flow (Sats → Mobile Money)
+User
+↓
+Tap Withdraw
+↓
+Choose Mobile Money
+↓
+Enter Amount
+↓
+PIN/Fingerprint
+↓
+Convert Sats → ZMW
+↓
+Create Lipila Disbursement
+↓
+Money Sent To MTN/Airtel/Zamtel
+↓
+Webhook Confirmation
+↓
+Transaction Completed
+
+Example:
+
+Withdraw
+20,000 sats
+
+Current BTC Price:
+K3,000,000/BTC
+
+Value:
+K600
+
+↓
+
+Send K600
+to MTN Money
+UStack Internal Conversion Engine
+
+You should create a service:
+
+RateService
+
+Responsibilities:
+
+Fetch BTC Price
+
+USD/BTC
+↓
+USD/ZMW
+↓
+Calculate BTC/ZMW
+
+Store every conversion used.
+
+Example:
+
+deposit
+
+K100
+
+btc_price_zmw:
+3,000,000
+
+credited:
+3333 sats
+
+This is important for audits.
+
+Treasury Integration
+
+For deposits:
+
+Lipila
+↓
+K100 Received
+↓
+Convert value to sats
+↓
+Increase treasury liability
+↓
+Credit user
+
+For withdrawals:
+
+User balance reduced
+↓
+Treasury reduced
+↓
+Convert sats value to ZMW
+↓
+Lipila disbursement
+User Experience
+
+The user only sees:
+
+Deposit
+Add Funds
+
+Amount: K100
+
+Network:
+• MTN
+• Airtel
+• Zamtel
+Withdraw
+Withdraw
+
+20,000 sats
+
+Destination:
+• MTN Money
+• Airtel Money
+• Zamtel Money
+
+The conversion happens automatically.
+
+Security Rules I Would Enforce
+
+Every money movement:
+
+Deposit
+Withdraw
+Move To Vault
+Unlock Vault
+Move To Hardware
+
+Requires:
+
+Fingerprint
+OR
+Transaction PIN
+
+Large withdrawals:
+
+PIN
++
+Email OTP
+One More Thing
+
+Because you're using Blink and Lipila together, I would create a dedicated service:
+
+TreasuryBridgeService
+
+Responsibilities:
+
+Lipila Deposit
+↓
+Convert ZMW to sats
+↓
+Credit UStack
+
+Withdraw sats
+↓
+Convert sats to ZMW
+↓
+Create Lipila Disbursement
+
+Blink Treasury Tracking
+
+Treasury Protection Tracking
+
+This service becomes the bridge between:
+
+Lipila (Fiat)
+↔
+UStack Ledger
+↔
+Blink Treasury
+
+and keeps all deposits, withdrawals, conversions, and treasury accounting in one place. This will make the backend much easier to maintain as UStack grows.
