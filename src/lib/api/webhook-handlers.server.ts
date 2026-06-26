@@ -203,13 +203,17 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
           rateUsd
         );
       } catch (err) {
-        console.error("[lipila-webhook] Reserve→Main transfer failed — returning 500 for retry:", err);
+        console.error("[lipila-webhook] Reserve→Main transfer failed — reverting to pending for retry:", err);
+        // IMPORTANT: revert status back to 'pending' so the next Lipila retry can re-claim this row
+        await execute(
+          `UPDATE transactions SET status='pending', updated_at=NOW() WHERE id=$1`,
+          [tx.id]
+        );
         await execute(
           `INSERT INTO activity_logs(user_id, action, title, meta)
            VALUES($1,'reserve_transfer_failed','Reserve Transfer Failed',$2)`,
           [tx.user_id, JSON.stringify({ error: String(err), amount_sats: amountSats, tx_id: tx.id })]
         );
-        // Return 500 so Lipila retries — tx stays pending
         return json({ error: "reserve transfer failed — will retry" }, 500);
       }
 
