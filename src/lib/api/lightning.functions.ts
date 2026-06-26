@@ -388,14 +388,39 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
       );
       return { ok: true, transactionId: result.transactionId, amountZmw, pending: true };
     } catch (err) {
-      await execute(
-        `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
-        [data.amountSats, payload.sub]
-      );
-      await execute(
-        `UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`,
-        [sentinelId]
-      );
+      // Attempt compensating Reserve→Main reversal — Main→Reserve may have run before disbursement failed
+      try {
+        const { transferReserveToMain } = await import("./reserve.server");
+        await transferReserveToMain(
+          data.amountSats,
+          `Compensating reversal for failed MoMo payout (tx ${sentinelId})`,
+          sentinelId
+        );
+      } catch (reverseErr) {
+        // Log treasury drift — manual reconciliation required if this fires
+        console.error("[mobileMoneyPayout] Compensating reversal failed:", reverseErr);
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta)
+           VALUES($1,'treasury_drift','Treasury Drift Alert',$2)`,
+          [payload.sub, JSON.stringify({
+            reason: "Reserve→Main reversal failed after payout error",
+            tx_id: sentinelId,
+            amount_sats: data.amountSats,
+            original_error: String(err),
+            reversal_error: String(reverseErr),
+          })]
+        );
+      }
+      await withTransaction(async (db) => {
+        await db.execute(
+          `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+          [data.amountSats, payload.sub]
+        );
+        await db.execute(
+          `UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`,
+          [sentinelId]
+        );
+      });
       throw err;
     }
   });
@@ -487,30 +512,7 @@ export const checkMomoStatus = createServerFn({ method: "POST" })
 
     const status = await getLipilaStatus(data.lipilaTransactionId);
 
-    if (status.status === "SUCCESS") {
-      const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; status: string; vault_id: string | null }>(
-        `SELECT id, user_id, amount_sats, status, vault_id FROM transactions
-         WHERE metadata->>'lipilaTransactionId'=$1 AND user_id=$2`,
-        [data.lipilaTransactionId, payload.sub]
-      );
-      if (tx && tx.status === "pending") {
-        const amountSats = Number(tx.amount_sats);
-        await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
-        if (tx.vault_id) {
-          await creditVault(tx.user_id, tx.vault_id, amountSats);
-          await execute(
-            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
-            [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Mobile Money vault deposit confirmed"]
-          );
-        } else {
-          await creditWallet(tx.user_id, amountSats);
-          await execute(
-            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-            [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Mobile Money deposit confirmed"]
-          );
-        }
-      }
-    }
-
+    // Note: ledger crediting is handled exclusively by the Lipila webhook handler.
+    // checkMomoStatus is only used for frontend polling to return the current status.
     return { status: status.status };
   });
