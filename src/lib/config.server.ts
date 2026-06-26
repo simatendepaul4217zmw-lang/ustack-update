@@ -23,5 +23,7 @@ export function getServerConfig() {
     lipilaWebhookSecret: process.env.LIPILA_WEBHOOK_SECRET,
     // CoinGecko
     coingeckoUrl: "https://api.coingecko.com/api/v3",
+    // Admin dashboard (simple token guard)
+    adminToken: process.env.ADMIN_TOKEN,
   };
 }
