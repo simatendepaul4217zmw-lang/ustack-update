@@ -304,6 +304,12 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
     const payload = await verifyToken(data.token);
     if (!payload) throw new Error("Unauthorized");
 
+    const priceZmwRow = await queryOne<{ price_zmw: string; price_usd: string }>(
+      `SELECT price_zmw, price_usd FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
+    );
+    const priceZmw = priceZmwRow ? Number(priceZmwRow.price_zmw) : 105_000 * 27.5;
+    const priceUsd = priceZmwRow ? Number(priceZmwRow.price_usd) : 105_000;
+
     const sentinelId = await withTransaction(async (db) => {
       const row = await db.queryOne<{ available_sats: string }>(
         `SELECT available_sats FROM wallets WHERE user_id=$1 FOR UPDATE`,
@@ -314,9 +320,9 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
       }
 
       const sentinel = await db.queryOne<{ id: string }>(
-        `INSERT INTO transactions(user_id, type, amount_sats, status, method)
-         VALUES($1,'send',$2,'initiated','mobile_money') RETURNING id`,
-        [payload.sub, data.amountSats]
+        `INSERT INTO transactions(user_id, type, amount_sats, status, method, source_wallet, destination_wallet, exchange_rate_zmw, exchange_rate_usd)
+         VALUES($1,'send',$2,'initiated','mobile_money','main','reserve',$3,$4) RETURNING id`,
+        [payload.sub, data.amountSats, priceZmw, priceUsd]
       );
 
       await db.execute(
@@ -329,6 +335,7 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
 
     const config = getServerConfig();
     const { getTreasuryState } = await import("./treasury.server");
+    const { transferMainToReserve } = await import("./reserve.server");
     const treasuryState = await getTreasuryState().catch(() => null);
     const treasuryMode = treasuryState?.current_mode ?? "btc";
 
@@ -346,9 +353,17 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
         return { ok: true, mock: true };
       }
 
-      const amountZmw = await satsToZmw(data.amountSats);
+      const amountZmw = (data.amountSats / 100_000_000) * priceZmw;
       const externalId = `ustack-payout-${Date.now()}-${payload.sub.slice(0, 8)}`;
 
+      // Step 1: Move sats from Main wallet → Reserve wallet
+      await transferMainToReserve(
+        data.amountSats,
+        `MoMo withdrawal for user ${payload.sub.slice(0, 8)}`,
+        sentinelId
+      );
+
+      // Step 2: Disburse ZMW to user via Lipila
       const result = await disburseFunds({
         phone: data.phone,
         amountZmw,
@@ -421,15 +436,20 @@ export const mobileMoneySend = createServerFn({ method: "POST" })
       return { ok: true, mock: true, amountSats: data.amountSats, pending: false };
     }
 
-    const amountZmw = await satsToZmw(data.amountSats);
+    const priceRow = await queryOne<{ price_zmw: string; price_usd: string }>(
+      `SELECT price_zmw, price_usd FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
+    );
+    const priceZmw = priceRow ? Number(priceRow.price_zmw) : 105_000 * 27.5;
+    const priceUsd = priceRow ? Number(priceRow.price_usd) : 105_000;
+    const amountZmw = (data.amountSats / 100_000_000) * priceZmw;
     const externalId = `ustack-deposit-${Date.now()}-${payload.sub.slice(0, 8)}`;
 
     const txRow = await queryOne<{ id: string }>(
-      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata, vault_id)
-       VALUES($1,'deposit',$2,'pending','mobile_money',$3,$4) RETURNING id`,
+      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata, vault_id, source_wallet, destination_wallet, exchange_rate_zmw, exchange_rate_usd)
+       VALUES($1,'deposit',$2,'pending','mobile_money',$3,$4,'reserve','main',$5,$6) RETURNING id`,
       [payload.sub, data.amountSats,
        JSON.stringify({ provider: data.provider, phone: data.phone, amountZmw, externalId }),
-       data.vaultId ?? null]
+       data.vaultId ?? null, priceZmw, priceUsd]
     );
 
     const result = await requestPayment({

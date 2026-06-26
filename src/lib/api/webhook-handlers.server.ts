@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { execute, queryOne } from "../db/index.server";
 import { creditWallet, creditVault } from "./wallet.functions";
 import { getServerConfig } from "../config.server";
+import { transferReserveToMain } from "./reserve.server";
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -61,6 +62,16 @@ export async function handleBlinkWebhook(request: Request): Promise<Response> {
   if (!paymentHash) return json({ ok: true, note: "no paymentHash" });
   if (direction !== "RECEIVE" || status !== "SUCCESS") {
     return json({ ok: true, note: "not a settled receive" });
+  }
+
+  // Idempotency: skip if already processed
+  const alreadyDone = await queryOne<{ id: string }>(
+    `SELECT id FROM transactions WHERE lightning_payment_hash=$1 AND status='confirmed' LIMIT 1`,
+    [paymentHash]
+  );
+  if (alreadyDone) {
+    console.log(`[blink-webhook] Duplicate webhook — already confirmed tx ${alreadyDone.id}`);
+    return json({ ok: true, note: "already processed" });
   }
 
   const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; vault_id: string | null }>(
@@ -138,12 +149,23 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
   }
 
   const rawStatus = (body.transactionStatus ?? body.status ?? "").toUpperCase();
-  // Support both new API fields (identifier/referenceId) and legacy fields
   const lipilaTransactionId = body.identifier ?? body.transactionId;
   const externalId = body.referenceId ?? body.externalId;
 
   if (!lipilaTransactionId && !externalId) {
     return json({ error: "Missing identifier/transactionId" }, 400);
+  }
+
+  // Idempotency: skip if already processed
+  const alreadyProcessed = await queryOne<{ id: string }>(
+    `SELECT id FROM transactions
+     WHERE (metadata->>'lipilaTransactionId'=$1 OR metadata->>'externalId'=$2)
+       AND status IN ('confirmed','failed') LIMIT 1`,
+    [lipilaTransactionId ?? "", externalId ?? ""]
+  );
+  if (alreadyProcessed) {
+    console.log(`[lipila-webhook] Duplicate webhook — already processed tx ${alreadyProcessed.id}`);
+    return json({ ok: true, note: "already processed" });
   }
 
   const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; type: string; vault_id: string | null }>(
@@ -156,9 +178,36 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
   if (!tx) return json({ ok: true, note: "no pending tx found" });
 
   if (rawStatus === "SUCCESS" || rawStatus === "COMPLETED") {
-    await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
+    const amountSats = Number(tx.amount_sats);
+
     if (tx.type === "deposit") {
-      const amountSats = Number(tx.amount_sats);
+      // Get exchange rates for recording
+      const priceRow = await queryOne<{ price_zmw: string; price_usd: string }>(
+        `SELECT price_zmw, price_usd FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
+      );
+
+      await execute(
+        `UPDATE transactions SET status='confirmed', source_wallet='reserve', destination_wallet='main',
+         exchange_rate_zmw=$1, exchange_rate_usd=$2, updated_at=NOW() WHERE id=$3`,
+        [priceRow ? Number(priceRow.price_zmw) : null, priceRow ? Number(priceRow.price_usd) : null, tx.id]
+      );
+
+      // Transfer sats from Reserve wallet → Main wallet on Blink
+      try {
+        await transferReserveToMain(
+          amountSats,
+          `MoMo deposit for user ${tx.user_id.slice(0, 8)}`,
+          tx.id
+        );
+      } catch (err) {
+        console.error("[lipila-webhook] Reserve→Main transfer failed:", err);
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta)
+           VALUES($1,'reserve_transfer_failed','Reserve Transfer Failed',$2::jsonb)`,
+          [tx.user_id, JSON.stringify({ error: String(err), amount_sats: amountSats, tx_id: tx.id })]
+        );
+      }
+
       if (tx.vault_id) {
         await creditVault(tx.user_id, tx.vault_id, amountSats);
         await execute(
@@ -182,6 +231,8 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
            `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been confirmed.`]
         );
       }
+    } else {
+      await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
     }
   } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
     await execute(`UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`, [tx.id]);
