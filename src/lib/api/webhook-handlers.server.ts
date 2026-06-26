@@ -156,27 +156,31 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
     return json({ error: "Missing identifier/transactionId" }, 400);
   }
 
-  // Idempotency: use canonical external_id column first, fall back to metadata fields
+  // Atomic claim: transition status='pending' → 'processing' in one UPDATE to prevent
+  // duplicate-webhook race conditions. Only the row that wins the UPDATE proceeds.
   const canonicalExternalId = externalId ?? lipilaTransactionId ?? "";
-  const alreadyProcessed = await queryOne<{ id: string }>(
-    `SELECT id FROM transactions
-     WHERE (external_id=$1 OR metadata->>'lipilaTransactionId'=$2 OR metadata->>'externalId'=$1)
-       AND status IN ('confirmed','failed') LIMIT 1`,
-    [canonicalExternalId, lipilaTransactionId ?? ""]
-  );
-  if (alreadyProcessed) {
-    console.log(`[lipila-webhook] Duplicate webhook — already processed tx ${alreadyProcessed.id}`);
-    return json({ ok: true, note: "already processed" });
-  }
-
   const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; type: string; vault_id: string | null }>(
-    `SELECT id, user_id, amount_sats, type, vault_id FROM transactions
+    `UPDATE transactions SET status='processing', updated_at=NOW()
      WHERE (external_id=$1 OR metadata->>'lipilaTransactionId'=$2 OR metadata->>'externalId'=$1)
-       AND status='pending' LIMIT 1`,
+       AND status='pending'
+     RETURNING id, user_id, amount_sats, type, vault_id`,
     [canonicalExternalId, lipilaTransactionId ?? ""]
   );
 
-  if (!tx) return json({ ok: true, note: "no pending tx found" });
+  if (!tx) {
+    // Either already processed (confirmed/failed/processing) or no matching tx
+    const existing = await queryOne<{ status: string }>(
+      `SELECT status FROM transactions
+       WHERE (external_id=$1 OR metadata->>'lipilaTransactionId'=$2 OR metadata->>'externalId'=$1)
+       LIMIT 1`,
+      [canonicalExternalId, lipilaTransactionId ?? ""]
+    );
+    if (existing) {
+      console.log(`[lipila-webhook] Duplicate webhook — tx already in status '${existing.status}'`);
+      return json({ ok: true, note: "already processed" });
+    }
+    return json({ ok: true, note: "no pending tx found" });
+  }
 
   const amountSats = Number(tx.amount_sats);
 

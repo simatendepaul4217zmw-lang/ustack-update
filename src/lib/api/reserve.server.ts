@@ -89,6 +89,19 @@ export async function transferReserveToMain(
     return "mock-reserve-to-main";
   }
 
+  // Idempotency: if a wallet_transfer already exists for this tx + direction, skip Blink call
+  if (transactionId) {
+    const existing = await queryOne<{ blink_tx_id: string }>(
+      `SELECT blink_tx_id FROM wallet_transfers
+       WHERE transaction_id=$1 AND from_wallet='reserve' AND to_wallet='main' LIMIT 1`,
+      [transactionId]
+    );
+    if (existing) {
+      console.log(`[reserve] Reserve→Main already executed for tx ${transactionId} — skipping duplicate`);
+      return existing.blink_tx_id;
+    }
+  }
+
   const reserveApiKey = config.reserveBlinkApiKey!;
   const reserveWalletId = config.reserveBlinkWalletId!;
   const mainWalletId = config.blinkWalletId!;
@@ -160,6 +173,19 @@ export async function transferMainToReserve(
       [JSON.stringify({ from_wallet: 'main', to_wallet: 'reserve', amount_sats: amountSats, reason, exchange_rate_zmw: exchangeRateZmw, exchange_rate_usd: exchangeRateUsd, mock: true })]
     );
     return "mock-main-to-reserve";
+  }
+
+  // Idempotency: if a wallet_transfer already exists for this tx + direction, skip Blink call
+  if (transactionId) {
+    const existing = await queryOne<{ blink_tx_id: string }>(
+      `SELECT blink_tx_id FROM wallet_transfers
+       WHERE transaction_id=$1 AND from_wallet='main' AND to_wallet='reserve' LIMIT 1`,
+      [transactionId]
+    );
+    if (existing) {
+      console.log(`[reserve] Main→Reserve already executed for tx ${transactionId} — skipping duplicate`);
+      return existing.blink_tx_id;
+    }
   }
 
   const mainApiKey = config.blinkApiKey!;
