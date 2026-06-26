@@ -356,7 +356,7 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
       const amountZmw = (data.amountSats / 100_000_000) * priceZmw;
       const externalId = `ustack-payout-${Date.now()}-${payload.sub.slice(0, 8)}`;
 
-      // Step 1: Move sats from Main wallet → Reserve wallet
+      // Step 1: Move sats from Main wallet → Reserve wallet on Blink
       await transferMainToReserve(
         data.amountSats,
         `MoMo withdrawal for user ${payload.sub.slice(0, 8)}`,
@@ -372,20 +372,21 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
         fullName: data.fullName,
       });
 
+      // Stay PENDING — finalized to confirmed/failed when Lipila webhook arrives
       await execute(
-        `UPDATE transactions SET status='confirmed',
-         metadata=$1, updated_at=NOW() WHERE id=$2`,
-        [JSON.stringify({
+        `UPDATE transactions SET status='pending', external_id=$1,
+         metadata=$2, updated_at=NOW() WHERE id=$3`,
+        [externalId, JSON.stringify({
           provider: data.provider, phone: data.phone, amountZmw,
           lipilaTransactionId: result.transactionId, externalId, treasury_mode: treasuryMode,
         }), sentinelId]
       );
       await execute(
-        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
-        [payload.sub, `Sent ${data.amountSats.toLocaleString()} sats`,
-         `Mobile Money · ${data.provider.toUpperCase()} · K${amountZmw.toFixed(2)}`]
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw_pending',$2,$3)`,
+        [payload.sub, `Sending ${data.amountSats.toLocaleString()} sats`,
+         `Mobile Money · ${data.provider.toUpperCase()} · K${amountZmw.toFixed(2)} — awaiting confirmation`]
       );
-      return { ok: true, transactionId: result.transactionId, amountZmw };
+      return { ok: true, transactionId: result.transactionId, amountZmw, pending: true };
     } catch (err) {
       await execute(
         `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
@@ -445,11 +446,11 @@ export const mobileMoneySend = createServerFn({ method: "POST" })
     const externalId = `ustack-deposit-${Date.now()}-${payload.sub.slice(0, 8)}`;
 
     const txRow = await queryOne<{ id: string }>(
-      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata, vault_id, source_wallet, destination_wallet, exchange_rate_zmw, exchange_rate_usd)
-       VALUES($1,'deposit',$2,'pending','mobile_money',$3,$4,'reserve','main',$5,$6) RETURNING id`,
+      `INSERT INTO transactions(user_id, type, amount_sats, status, method, metadata, vault_id, source_wallet, destination_wallet, exchange_rate_zmw, exchange_rate_usd, external_id)
+       VALUES($1,'deposit',$2,'pending','mobile_money',$3,$4,'reserve','main',$5,$6,$7) RETURNING id`,
       [payload.sub, data.amountSats,
        JSON.stringify({ provider: data.provider, phone: data.phone, amountZmw, externalId }),
-       data.vaultId ?? null, priceZmw, priceUsd]
+       data.vaultId ?? null, priceZmw, priceUsd, externalId]
     );
 
     const result = await requestPayment({

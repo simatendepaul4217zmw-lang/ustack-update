@@ -156,12 +156,13 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
     return json({ error: "Missing identifier/transactionId" }, 400);
   }
 
-  // Idempotency: skip if already processed
+  // Idempotency: use canonical external_id column first, fall back to metadata fields
+  const canonicalExternalId = externalId ?? lipilaTransactionId ?? "";
   const alreadyProcessed = await queryOne<{ id: string }>(
     `SELECT id FROM transactions
-     WHERE (metadata->>'lipilaTransactionId'=$1 OR metadata->>'externalId'=$2)
+     WHERE (external_id=$1 OR metadata->>'lipilaTransactionId'=$2 OR metadata->>'externalId'=$1)
        AND status IN ('confirmed','failed') LIMIT 1`,
-    [lipilaTransactionId ?? "", externalId ?? ""]
+    [canonicalExternalId, lipilaTransactionId ?? ""]
   );
   if (alreadyProcessed) {
     console.log(`[lipila-webhook] Duplicate webhook — already processed tx ${alreadyProcessed.id}`);
@@ -170,9 +171,9 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
 
   const tx = await queryOne<{ id: string; user_id: string; amount_sats: string; type: string; vault_id: string | null }>(
     `SELECT id, user_id, amount_sats, type, vault_id FROM transactions
-     WHERE (metadata->>'lipilaTransactionId'=$1 OR metadata->>'externalId'=$2)
+     WHERE (external_id=$1 OR metadata->>'lipilaTransactionId'=$2 OR metadata->>'externalId'=$1)
        AND status='pending' LIMIT 1`,
-    [lipilaTransactionId ?? "", externalId ?? ""]
+    [canonicalExternalId, lipilaTransactionId ?? ""]
   );
 
   if (!tx) return json({ ok: true, note: "no pending tx found" });
@@ -181,18 +182,11 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
     const amountSats = Number(tx.amount_sats);
 
     if (tx.type === "deposit") {
-      // Get exchange rates for recording
       const priceRow = await queryOne<{ price_zmw: string; price_usd: string }>(
         `SELECT price_zmw, price_usd FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
       );
 
-      await execute(
-        `UPDATE transactions SET status='confirmed', source_wallet='reserve', destination_wallet='main',
-         exchange_rate_zmw=$1, exchange_rate_usd=$2, updated_at=NOW() WHERE id=$3`,
-        [priceRow ? Number(priceRow.price_zmw) : null, priceRow ? Number(priceRow.price_usd) : null, tx.id]
-      );
-
-      // Transfer sats from Reserve wallet → Main wallet on Blink
+      // Transfer sats Reserve→Main FIRST — if this fails, do NOT credit the user
       try {
         await transferReserveToMain(
           amountSats,
@@ -200,13 +194,25 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
           tx.id
         );
       } catch (err) {
-        console.error("[lipila-webhook] Reserve→Main transfer failed:", err);
+        console.error("[lipila-webhook] Reserve→Main transfer failed — holding tx in pending_transfer:", err);
+        await execute(
+          `UPDATE transactions SET status='pending_transfer', updated_at=NOW() WHERE id=$1`,
+          [tx.id]
+        );
         await execute(
           `INSERT INTO activity_logs(user_id, action, title, meta)
            VALUES($1,'reserve_transfer_failed','Reserve Transfer Failed',$2::jsonb)`,
           [tx.user_id, JSON.stringify({ error: String(err), amount_sats: amountSats, tx_id: tx.id })]
         );
+        return json({ ok: true, note: "reserve transfer failed — tx held for retry" });
       }
+
+      // Reserve→Main succeeded — now confirm and credit user
+      await execute(
+        `UPDATE transactions SET status='confirmed', source_wallet='reserve', destination_wallet='main',
+         external_id=$1, exchange_rate_zmw=$2, exchange_rate_usd=$3, updated_at=NOW() WHERE id=$4`,
+        [canonicalExternalId, priceRow ? Number(priceRow.price_zmw) : null, priceRow ? Number(priceRow.price_usd) : null, tx.id]
+      );
 
       if (tx.vault_id) {
         await creditVault(tx.user_id, tx.vault_id, amountSats);
@@ -231,18 +237,51 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
            `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been confirmed.`]
         );
       }
+    } else if (tx.type === "send") {
+      // MoMo withdrawal confirmed by Lipila
+      await execute(
+        `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+        [canonicalExternalId, tx.id]
+      );
+      await execute(
+        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+        [tx.user_id, `Sent ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal confirmed"]
+      );
+      await execute(
+        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
+        [tx.user_id, "Withdrawal confirmed", `Your Mobile Money payout has been sent successfully.`]
+      );
     } else {
-      await execute(`UPDATE transactions SET status='confirmed', updated_at=NOW() WHERE id=$1`, [tx.id]);
+      await execute(
+        `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+        [canonicalExternalId, tx.id]
+      );
     }
   } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
-    await execute(`UPDATE transactions SET status='failed', updated_at=NOW() WHERE id=$1`, [tx.id]);
     await execute(
-      `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
-      [tx.user_id, "Deposit failed",
-       "Your Mobile Money deposit could not be completed. Please try again."]
+      `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+      [canonicalExternalId, tx.id]
     );
+    if (tx.type === "send") {
+      // Refund user sats — payout did not go through
+      await execute(
+        `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+        [Number(tx.amount_sats), tx.user_id]
+      );
+      await execute(
+        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
+        [tx.user_id, "Withdrawal failed",
+         "Your Mobile Money payout could not be completed. Your sats have been refunded."]
+      );
+    } else {
+      await execute(
+        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
+        [tx.user_id, "Deposit failed",
+         "Your Mobile Money deposit could not be completed. Please try again."]
+      );
+    }
   }
 
-  console.log(`[lipila-webhook] Processed tx ${tx.id} → ${rawStatus}`);
+  console.log(`[lipila-webhook] Processed tx ${tx.id} (${tx.type}) → ${rawStatus}`);
   return json({ ok: true });
 }
