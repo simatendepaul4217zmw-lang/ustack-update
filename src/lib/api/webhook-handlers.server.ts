@@ -184,160 +184,175 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
 
   const amountSats = Number(tx.amount_sats);
 
-  if (rawStatus === "SUCCESS" || rawStatus === "COMPLETED") {
+  // Top-level guard: if anything throws after atomic claim, revert processing→pending
+  // so the next Lipila webhook retry can re-claim and reprocess this row.
+  try {
+    if (rawStatus === "SUCCESS" || rawStatus === "COMPLETED") {
 
-    if (tx.type === "deposit") {
-      const priceRow = await queryOne<{ price_zmw: string; price_usd: string }>(
-        `SELECT price_zmw, price_usd FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
-      );
-      const rateZmw = priceRow ? Number(priceRow.price_zmw) : null;
-      const rateUsd = priceRow ? Number(priceRow.price_usd) : null;
+      if (tx.type === "deposit") {
+        const priceRow = await queryOne<{ price_zmw: string; price_usd: string }>(
+          `SELECT price_zmw, price_usd FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
+        );
+        const rateZmw = priceRow ? Number(priceRow.price_zmw) : null;
+        const rateUsd = priceRow ? Number(priceRow.price_usd) : null;
 
-      // Transfer sats Reserve→Main FIRST — if this fails, leave tx pending so Lipila retries
-      try {
-        await transferReserveToMain(
-          amountSats,
-          `MoMo deposit for user ${tx.user_id.slice(0, 8)}`,
-          tx.id,
-          rateZmw,
-          rateUsd
-        );
-      } catch (err) {
-        console.error("[lipila-webhook] Reserve→Main transfer failed — reverting to pending for retry:", err);
-        // IMPORTANT: revert status back to 'pending' so the next Lipila retry can re-claim this row
+        // Transfer sats Reserve→Main FIRST — if this fails, revert to pending so Lipila retries
+        try {
+          await transferReserveToMain(
+            amountSats,
+            `MoMo deposit for user ${tx.user_id.slice(0, 8)}`,
+            tx.id,
+            rateZmw,
+            rateUsd
+          );
+        } catch (err) {
+          console.error("[lipila-webhook] Reserve→Main transfer failed — reverting to pending for retry:", err);
+          await execute(
+            `UPDATE transactions SET status='pending', updated_at=NOW() WHERE id=$1`,
+            [tx.id]
+          );
+          await execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta)
+             VALUES($1,'reserve_transfer_failed','Reserve Transfer Failed',$2)`,
+            [tx.user_id, JSON.stringify({ error: String(err), amount_sats: amountSats, tx_id: tx.id })]
+          );
+          return json({ error: "reserve transfer failed — will retry" }, 500);
+        }
+
+        // Reserve→Main succeeded — wrap confirm + ledger credit in one DB transaction
+        await withTransaction(async (db) => {
+          await db.execute(
+            `UPDATE transactions SET status='confirmed', source_wallet='reserve', destination_wallet='main',
+             external_id=$1, exchange_rate_zmw=$2, exchange_rate_usd=$3, updated_at=NOW() WHERE id=$4`,
+            [canonicalExternalId, rateZmw, rateUsd, tx.id]
+          );
+
+          if (tx.vault_id) {
+            await db.execute(
+              `UPDATE wallets SET vault_sats=vault_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+              [amountSats, tx.user_id]
+            );
+            await db.execute(
+              `UPDATE vaults SET current_sats=current_sats+$1, last_deposit_at=NOW(), updated_at=NOW()
+               WHERE id=$2 AND user_id=$3 AND status='active'`,
+              [amountSats, tx.vault_id, tx.user_id]
+            );
+            await db.execute(
+              `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
+              [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Mobile Money vault deposit confirmed"]
+            );
+            await db.execute(
+              `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+              [tx.user_id, "Vault deposit confirmed",
+               `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been added to your vault.`]
+            );
+          } else {
+            await db.execute(
+              `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+              [amountSats, tx.user_id]
+            );
+            await db.execute(
+              `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+              [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Mobile Money deposit confirmed"]
+            );
+            await db.execute(
+              `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+              [tx.user_id, "Deposit confirmed",
+               `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been confirmed.`]
+            );
+          }
+        });
+      } else if (tx.type === "send") {
+        // MoMo withdrawal confirmed by Lipila — atomic confirm + activity log
+        await withTransaction(async (db) => {
+          await db.execute(
+            `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+            [canonicalExternalId, tx.id]
+          );
+          await db.execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+            [tx.user_id, `Sent ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal confirmed"]
+          );
+          await db.execute(
+            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
+            [tx.user_id, "Withdrawal confirmed", `Your Mobile Money payout has been sent successfully.`]
+          );
+        });
+      } else {
         await execute(
-          `UPDATE transactions SET status='pending', updated_at=NOW() WHERE id=$1`,
-          [tx.id]
+          `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+          [canonicalExternalId, tx.id]
         );
-        await execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta)
-           VALUES($1,'reserve_transfer_failed','Reserve Transfer Failed',$2)`,
-          [tx.user_id, JSON.stringify({ error: String(err), amount_sats: amountSats, tx_id: tx.id })]
-        );
-        return json({ error: "reserve transfer failed — will retry" }, 500);
       }
-
-      // Reserve→Main succeeded — wrap confirm + ledger credit in one DB transaction
-      await withTransaction(async (db) => {
-        await db.execute(
-          `UPDATE transactions SET status='confirmed', source_wallet='reserve', destination_wallet='main',
-           external_id=$1, exchange_rate_zmw=$2, exchange_rate_usd=$3, updated_at=NOW() WHERE id=$4`,
-          [canonicalExternalId, rateZmw, rateUsd, tx.id]
-        );
-
-        if (tx.vault_id) {
-          await db.execute(
-            `UPDATE wallets SET vault_sats=vault_sats+$1, updated_at=NOW() WHERE user_id=$2`,
-            [amountSats, tx.user_id]
+    } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
+      if (tx.type === "send") {
+        // Reverse the earlier Main→Reserve Blink transfer before refunding user
+        try {
+          await transferReserveToMain(
+            amountSats,
+            `Reversal for failed MoMo payout (tx ${tx.id})`,
+            tx.id
           );
-          await db.execute(
-            `UPDATE vaults SET current_sats=current_sats+$1, last_deposit_at=NOW(), updated_at=NOW()
-             WHERE id=$2 AND user_id=$3 AND status='active'`,
-            [amountSats, tx.vault_id, tx.user_id]
+        } catch (reverseErr) {
+          // Log drift and continue — user refund still happens; treasury needs manual reconciliation
+          console.error("[lipila-webhook] Reserve→Main reversal failed for failed payout:", reverseErr);
+          await execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta)
+             VALUES($1,'treasury_drift','Treasury Drift Alert',$2)`,
+            [tx.user_id, JSON.stringify({
+              reason: "Reserve→Main reversal failed on payout FAILED webhook",
+              tx_id: tx.id,
+              amount_sats: amountSats,
+              error: String(reverseErr),
+            })]
           );
+        }
+        // Atomic: mark failed + refund sats
+        await withTransaction(async (db) => {
           await db.execute(
-            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
-            [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Mobile Money vault deposit confirmed"]
+            `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+            [canonicalExternalId, tx.id]
           );
-          await db.execute(
-            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
-            [tx.user_id, "Vault deposit confirmed",
-             `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been added to your vault.`]
-          );
-        } else {
           await db.execute(
             `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
             [amountSats, tx.user_id]
           );
           await db.execute(
-            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-            [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Mobile Money deposit confirmed"]
+            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw_failed',$2,$3)`,
+            [tx.user_id, `Refunded ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal failed"]
           );
           await db.execute(
-            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
-            [tx.user_id, "Deposit confirmed",
-             `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been confirmed.`]
+            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
+            [tx.user_id, "Withdrawal failed",
+             "Your Mobile Money payout could not be completed. Your sats have been refunded."]
           );
-        }
-      });
-    } else if (tx.type === "send") {
-      // MoMo withdrawal confirmed by Lipila — atomic confirm + activity log
-      await withTransaction(async (db) => {
-        await db.execute(
-          `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
-          [canonicalExternalId, tx.id]
-        );
-        await db.execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
-          [tx.user_id, `Sent ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal confirmed"]
-        );
-        await db.execute(
-          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
-          [tx.user_id, "Withdrawal confirmed", `Your Mobile Money payout has been sent successfully.`]
-        );
-      });
-    } else {
-      await execute(
-        `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
-        [canonicalExternalId, tx.id]
-      );
-    }
-  } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
-    if (tx.type === "send") {
-      // Reverse the earlier Main→Reserve Blink transfer before refunding user
-      try {
-        await transferReserveToMain(
-          amountSats,
-          `Reversal for failed MoMo payout (tx ${tx.id})`,
-          tx.id
-        );
-      } catch (reverseErr) {
-        // Log drift and continue — user refund still happens; treasury needs manual reconciliation
-        console.error("[lipila-webhook] Reserve→Main reversal failed for failed payout:", reverseErr);
-        await execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta)
-           VALUES($1,'treasury_drift','Treasury Drift Alert',$2)`,
-          [tx.user_id, JSON.stringify({
-            reason: "Reserve→Main reversal failed on payout FAILED webhook",
-            tx_id: tx.id,
-            amount_sats: amountSats,
-            error: String(reverseErr),
-          })]
-        );
+        });
+      } else {
+        await withTransaction(async (db) => {
+          await db.execute(
+            `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+            [canonicalExternalId, tx.id]
+          );
+          await db.execute(
+            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
+            [tx.user_id, "Deposit failed",
+             "Your Mobile Money deposit could not be completed. Please try again."]
+          );
+        });
       }
-      // Atomic: mark failed + refund sats
-      await withTransaction(async (db) => {
-        await db.execute(
-          `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
-          [canonicalExternalId, tx.id]
-        );
-        await db.execute(
-          `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
-          [amountSats, tx.user_id]
-        );
-        await db.execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw_failed',$2,$3)`,
-          [tx.user_id, `Refunded ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal failed"]
-        );
-        await db.execute(
-          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
-          [tx.user_id, "Withdrawal failed",
-           "Your Mobile Money payout could not be completed. Your sats have been refunded."]
-        );
-      });
-    } else {
-      await withTransaction(async (db) => {
-        await db.execute(
-          `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
-          [canonicalExternalId, tx.id]
-        );
-        await db.execute(
-          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
-          [tx.user_id, "Deposit failed",
-           "Your Mobile Money deposit could not be completed. Please try again."]
-        );
-      });
     }
+  } catch (unexpectedErr) {
+    // Revert processing→pending so retries can re-claim this row
+    console.error("[lipila-webhook] Unexpected error after atomic claim — reverting to pending:", unexpectedErr);
+    try {
+      await execute(
+        `UPDATE transactions SET status='pending', updated_at=NOW() WHERE id=$1 AND status='processing'`,
+        [tx.id]
+      );
+    } catch (revertErr) {
+      console.error("[lipila-webhook] Failed to revert tx to pending:", revertErr);
+    }
+    throw unexpectedErr;
   }
 
   console.log(`[lipila-webhook] Processed tx ${tx.id} (${tx.type}) → ${rawStatus}`);
