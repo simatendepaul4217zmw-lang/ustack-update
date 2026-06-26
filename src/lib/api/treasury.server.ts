@@ -77,6 +77,8 @@ export async function swapBtcToUsd(): Promise<string> {
     return "noop";
   }
 
+  console.log(`[treasury] swapBtcToUsd: swapping 100% of BTC balance — ${balances.btcSats} sats → USD stablesats`);
+
   const res = await fetch(config.blinkApiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-API-KEY": config.blinkApiKey! },
