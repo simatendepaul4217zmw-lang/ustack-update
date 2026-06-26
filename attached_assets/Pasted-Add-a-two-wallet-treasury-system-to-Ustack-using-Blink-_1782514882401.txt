@@ -1,0 +1,81 @@
+Add a two-wallet treasury system to Ustack using Blink wallets.
+
+Wallet Architecture
+
+Implement two separate Blink wallets:
+
+1. Main Wallet (Customer Funds)
+This wallet holds all customer Bitcoin.
+Every user's balance is tracked in the Ustack internal ledger.
+The sum of all user balances should match the Main Wallet balance.
+All Bitcoin withdrawals are sent directly from this wallet to the user's external Lightning or Bitcoin wallet.
+2. Reserve Wallet (Liquidity Wallet)
+This wallet is used for mobile money conversions.
+It provides the liquidity needed when users buy Bitcoin using mobile money.
+It receives sats back when users sell Bitcoin for mobile money.
+This wallet should have its own Blink wallet ID and API credentials.
+Mobile Money Deposit Flow
+User deposits ZMW through Lipila.
+Lipila sends a successful webhook.
+Calculate the equivalent sats using the current BTC/ZMW exchange rate.
+Transfer those sats from the Reserve Wallet to the Main Wallet.
+Credit the user's internal ledger with the transferred sats.
+Record the transaction in the database.
+If the Reserve Wallet balance falls below a configurable threshold, generate an alert indicating it needs replenishment.
+Mobile Money Withdrawal Flow
+User requests a withdrawal to mobile money.
+Deduct the sats from the user's ledger.
+Transfer the same amount of sats from the Main Wallet to the Reserve Wallet.
+Convert the sats to their ZMW equivalent.
+Call the Lipila payout API.
+Mark the withdrawal as complete after Lipila confirms success via webhook.
+Bitcoin Withdrawal Flow
+User requests a Bitcoin or Lightning withdrawal.
+Verify the user has sufficient balance.
+Deduct the sats from the user's ledger.
+Send the sats directly from the Main Wallet to the user's Bitcoin or Lightning address.
+Record the transaction.
+Configuration
+
+Create configuration values for:
+
+MAIN_BLINK_WALLET_ID
+RESERVE_BLINK_WALLET_ID
+MAIN_BLINK_API_KEY
+RESERVE_BLINK_API_KEY
+RESERVE_MINIMUM_BALANCE
+
+Store these as Replit Secrets (environment variables), not in the source code.
+
+Database
+
+Add transaction records with:
+
+Transaction ID
+User ID
+Type (deposit, mobile_money_withdrawal, bitcoin_withdrawal, internal_transfer)
+Source wallet
+Destination wallet
+Amount in sats
+Amount in ZMW (if applicable)
+Exchange rate
+Reference ID
+Status
+Timestamp
+Treasury Dashboard
+
+Create an admin page showing:
+
+Main Wallet balance (sats)
+Reserve Wallet balance (sats)
+Total user liabilities (sum of all user balances)
+Reserve utilization
+Pending Lipila deposits
+Pending Lipila withdrawals
+Low reserve warning
+Important
+All wallet operations must be atomic to prevent inconsistencies.
+Prevent duplicate webhook processing using idempotency.
+Verify all Lipila webhook signatures.
+Log every internal wallet transfer for auditing.
+Keep the architecture modular so additional reserve wallets or currencies can be added later.
