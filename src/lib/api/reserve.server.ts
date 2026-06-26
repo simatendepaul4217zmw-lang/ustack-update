@@ -141,7 +141,9 @@ export async function transferReserveToMain(
 export async function transferMainToReserve(
   amountSats: number,
   reason: string,
-  transactionId?: string
+  transactionId?: string,
+  exchangeRateZmw?: number | null,
+  exchangeRateUsd?: number | null
 ): Promise<string> {
   const config = getServerConfig();
 
@@ -155,7 +157,7 @@ export async function transferMainToReserve(
     await execute(
       `INSERT INTO activity_logs(user_id, action, title, meta)
        VALUES(NULL,'wallet_transfer','Main → Reserve Transfer',$1)`,
-      [JSON.stringify({ from_wallet: 'main', to_wallet: 'reserve', amount_sats: amountSats, reason, mock: true })]
+      [JSON.stringify({ from_wallet: 'main', to_wallet: 'reserve', amount_sats: amountSats, reason, exchange_rate_zmw: exchangeRateZmw, exchange_rate_usd: exchangeRateUsd, mock: true })]
     );
     return "mock-main-to-reserve";
   }
@@ -199,7 +201,7 @@ export async function transferMainToReserve(
   await execute(
     `INSERT INTO activity_logs(user_id, action, title, meta)
      VALUES(NULL,'wallet_transfer','Main → Reserve Transfer',$1)`,
-    [JSON.stringify({ from_wallet: 'main', to_wallet: 'reserve', amount_sats: amountSats, reason, blink_tx_id: blinkTxId })]
+    [JSON.stringify({ from_wallet: 'main', to_wallet: 'reserve', amount_sats: amountSats, reason, blink_tx_id: blinkTxId, exchange_rate_zmw: exchangeRateZmw, exchange_rate_usd: exchangeRateUsd })]
   );
 
   console.log(`[reserve] ✅ Main→Reserve complete. Blink TX: ${blinkTxId}`);

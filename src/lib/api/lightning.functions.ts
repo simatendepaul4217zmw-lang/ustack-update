@@ -339,6 +339,7 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
     const treasuryState = await getTreasuryState().catch(() => null);
     const treasuryMode = treasuryState?.current_mode ?? "btc";
 
+    let mainToReserveCompleted = false;
     try {
       if (config.mockLipila) {
         await execute(
@@ -360,8 +361,11 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
       await transferMainToReserve(
         data.amountSats,
         `MoMo withdrawal for user ${payload.sub.slice(0, 8)}`,
-        sentinelId
+        sentinelId,
+        priceZmw,
+        priceUsd
       );
+      mainToReserveCompleted = true;
 
       // Step 2: Disburse ZMW to user via Lipila
       const result = await disburseFunds({
@@ -388,28 +392,30 @@ export const mobileMoneyPayout = createServerFn({ method: "POST" })
       );
       return { ok: true, transactionId: result.transactionId, amountZmw, pending: true };
     } catch (err) {
-      // Attempt compensating Reserve→Main reversal — Main→Reserve may have run before disbursement failed
-      try {
-        const { transferReserveToMain } = await import("./reserve.server");
-        await transferReserveToMain(
-          data.amountSats,
-          `Compensating reversal for failed MoMo payout (tx ${sentinelId})`,
-          sentinelId
-        );
-      } catch (reverseErr) {
-        // Log treasury drift — manual reconciliation required if this fires
-        console.error("[mobileMoneyPayout] Compensating reversal failed:", reverseErr);
-        await execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta)
-           VALUES($1,'treasury_drift','Treasury Drift Alert',$2)`,
-          [payload.sub, JSON.stringify({
-            reason: "Reserve→Main reversal failed after payout error",
-            tx_id: sentinelId,
-            amount_sats: data.amountSats,
-            original_error: String(err),
-            reversal_error: String(reverseErr),
-          })]
-        );
+      // Only attempt Reserve→Main reversal if Main→Reserve actually succeeded
+      if (mainToReserveCompleted) {
+        try {
+          const { transferReserveToMain } = await import("./reserve.server");
+          await transferReserveToMain(
+            data.amountSats,
+            `Compensating reversal for failed MoMo payout (tx ${sentinelId})`,
+            sentinelId
+          );
+        } catch (reverseErr) {
+          // Log treasury drift — manual reconciliation required if this fires
+          console.error("[mobileMoneyPayout] Compensating reversal failed:", reverseErr);
+          await execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta)
+             VALUES($1,'treasury_drift','Treasury Drift Alert',$2)`,
+            [payload.sub, JSON.stringify({
+              reason: "Reserve→Main reversal failed after payout error",
+              tx_id: sentinelId,
+              amount_sats: data.amountSats,
+              original_error: String(err),
+              reversal_error: String(reverseErr),
+            })]
+          );
+        }
       }
       await withTransaction(async (db) => {
         await db.execute(

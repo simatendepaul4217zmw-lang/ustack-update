@@ -276,6 +276,27 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
     }
   } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
     if (tx.type === "send") {
+      // Reverse the earlier Main→Reserve Blink transfer before refunding user
+      try {
+        await transferReserveToMain(
+          amountSats,
+          `Reversal for failed MoMo payout (tx ${tx.id})`,
+          tx.id
+        );
+      } catch (reverseErr) {
+        // Log drift and continue — user refund still happens; treasury needs manual reconciliation
+        console.error("[lipila-webhook] Reserve→Main reversal failed for failed payout:", reverseErr);
+        await execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta)
+           VALUES($1,'treasury_drift','Treasury Drift Alert',$2)`,
+          [tx.user_id, JSON.stringify({
+            reason: "Reserve→Main reversal failed on payout FAILED webhook",
+            tx_id: tx.id,
+            amount_sats: amountSats,
+            error: String(reverseErr),
+          })]
+        );
+      }
       // Atomic: mark failed + refund sats
       await withTransaction(async (db) => {
         await db.execute(
