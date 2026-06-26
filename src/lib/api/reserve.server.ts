@@ -49,7 +49,7 @@ async function checkAndAlertLowReserve(reserveSats: number): Promise<void> {
 
   await execute(
     `INSERT INTO activity_logs(user_id, action, title, meta)
-     VALUES (NULL, 'low_reserve_alert', 'Reserve Wallet Low', $1::jsonb)`,
+     VALUES (NULL, 'low_reserve_alert', 'Reserve Wallet Low', $1)`,
     [JSON.stringify({ reserve_sats: reserveSats, minimum_balance: config.reserveMinimumBalance })]
   );
 
@@ -68,7 +68,9 @@ async function checkAndAlertLowReserve(reserveSats: number): Promise<void> {
 export async function transferReserveToMain(
   amountSats: number,
   reason: string,
-  transactionId?: string
+  transactionId?: string,
+  exchangeRateZmw?: number | null,
+  exchangeRateUsd?: number | null
 ): Promise<string> {
   const config = getServerConfig();
 
@@ -78,6 +80,11 @@ export async function transferReserveToMain(
       `INSERT INTO wallet_transfers(from_wallet, to_wallet, amount_sats, reason, blink_tx_id, transaction_id)
        VALUES('reserve','main',$1,$2,'mock-reserve-to-main',$3)`,
       [amountSats, reason, transactionId ?? null]
+    );
+    await execute(
+      `INSERT INTO activity_logs(user_id, action, title, meta)
+       VALUES(NULL,'wallet_transfer','Reserve → Main Transfer',$1)`,
+      [JSON.stringify({ from_wallet: 'reserve', to_wallet: 'main', amount_sats: amountSats, reason, exchange_rate_zmw: exchangeRateZmw, exchange_rate_usd: exchangeRateUsd, mock: true })]
     );
     return "mock-reserve-to-main";
   }
@@ -118,6 +125,12 @@ export async function transferReserveToMain(
     [amountSats, reason, blinkTxId, transactionId ?? null]
   );
 
+  await execute(
+    `INSERT INTO activity_logs(user_id, action, title, meta)
+     VALUES(NULL,'wallet_transfer','Reserve → Main Transfer',$1)`,
+    [JSON.stringify({ from_wallet: 'reserve', to_wallet: 'main', amount_sats: amountSats, reason, blink_tx_id: blinkTxId, exchange_rate_zmw: exchangeRateZmw, exchange_rate_usd: exchangeRateUsd })]
+  );
+
   const newBalance = await getReserveBalance();
   await checkAndAlertLowReserve(newBalance);
 
@@ -138,6 +151,11 @@ export async function transferMainToReserve(
       `INSERT INTO wallet_transfers(from_wallet, to_wallet, amount_sats, reason, blink_tx_id, transaction_id)
        VALUES('main','reserve',$1,$2,'mock-main-to-reserve',$3)`,
       [amountSats, reason, transactionId ?? null]
+    );
+    await execute(
+      `INSERT INTO activity_logs(user_id, action, title, meta)
+       VALUES(NULL,'wallet_transfer','Main → Reserve Transfer',$1)`,
+      [JSON.stringify({ from_wallet: 'main', to_wallet: 'reserve', amount_sats: amountSats, reason, mock: true })]
     );
     return "mock-main-to-reserve";
   }
@@ -176,6 +194,12 @@ export async function transferMainToReserve(
     `INSERT INTO wallet_transfers(from_wallet, to_wallet, amount_sats, reason, blink_tx_id, transaction_id)
      VALUES('main','reserve',$1,$2,$3,$4)`,
     [amountSats, reason, blinkTxId, transactionId ?? null]
+  );
+
+  await execute(
+    `INSERT INTO activity_logs(user_id, action, title, meta)
+     VALUES(NULL,'wallet_transfer','Main → Reserve Transfer',$1)`,
+    [JSON.stringify({ from_wallet: 'main', to_wallet: 'reserve', amount_sats: amountSats, reason, blink_tx_id: blinkTxId })]
   );
 
   console.log(`[reserve] ✅ Main→Reserve complete. Blink TX: ${blinkTxId}`);

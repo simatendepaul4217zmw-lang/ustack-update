@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { execute, queryOne } from "../db/index.server";
+import { execute, queryOne, withTransaction } from "../db/index.server";
 import { creditWallet, creditVault } from "./wallet.functions";
 import { getServerConfig } from "../config.server";
 import { transferReserveToMain } from "./reserve.server";
@@ -178,79 +178,96 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
 
   if (!tx) return json({ ok: true, note: "no pending tx found" });
 
+  const amountSats = Number(tx.amount_sats);
+
   if (rawStatus === "SUCCESS" || rawStatus === "COMPLETED") {
-    const amountSats = Number(tx.amount_sats);
 
     if (tx.type === "deposit") {
       const priceRow = await queryOne<{ price_zmw: string; price_usd: string }>(
         `SELECT price_zmw, price_usd FROM btc_prices ORDER BY fetched_at DESC LIMIT 1`
       );
+      const rateZmw = priceRow ? Number(priceRow.price_zmw) : null;
+      const rateUsd = priceRow ? Number(priceRow.price_usd) : null;
 
-      // Transfer sats Reserve→Main FIRST — if this fails, do NOT credit the user
+      // Transfer sats Reserve→Main FIRST — if this fails, leave tx pending so Lipila retries
       try {
         await transferReserveToMain(
           amountSats,
           `MoMo deposit for user ${tx.user_id.slice(0, 8)}`,
-          tx.id
+          tx.id,
+          rateZmw,
+          rateUsd
         );
       } catch (err) {
-        console.error("[lipila-webhook] Reserve→Main transfer failed — holding tx in pending_transfer:", err);
-        await execute(
-          `UPDATE transactions SET status='pending_transfer', updated_at=NOW() WHERE id=$1`,
-          [tx.id]
-        );
+        console.error("[lipila-webhook] Reserve→Main transfer failed — returning 500 for retry:", err);
         await execute(
           `INSERT INTO activity_logs(user_id, action, title, meta)
-           VALUES($1,'reserve_transfer_failed','Reserve Transfer Failed',$2::jsonb)`,
+           VALUES($1,'reserve_transfer_failed','Reserve Transfer Failed',$2)`,
           [tx.user_id, JSON.stringify({ error: String(err), amount_sats: amountSats, tx_id: tx.id })]
         );
-        return json({ ok: true, note: "reserve transfer failed — tx held for retry" });
+        // Return 500 so Lipila retries — tx stays pending
+        return json({ error: "reserve transfer failed — will retry" }, 500);
       }
 
-      // Reserve→Main succeeded — now confirm and credit user
-      await execute(
-        `UPDATE transactions SET status='confirmed', source_wallet='reserve', destination_wallet='main',
-         external_id=$1, exchange_rate_zmw=$2, exchange_rate_usd=$3, updated_at=NOW() WHERE id=$4`,
-        [canonicalExternalId, priceRow ? Number(priceRow.price_zmw) : null, priceRow ? Number(priceRow.price_usd) : null, tx.id]
-      );
+      // Reserve→Main succeeded — wrap confirm + ledger credit in one DB transaction
+      await withTransaction(async (db) => {
+        await db.execute(
+          `UPDATE transactions SET status='confirmed', source_wallet='reserve', destination_wallet='main',
+           external_id=$1, exchange_rate_zmw=$2, exchange_rate_usd=$3, updated_at=NOW() WHERE id=$4`,
+          [canonicalExternalId, rateZmw, rateUsd, tx.id]
+        );
 
-      if (tx.vault_id) {
-        await creditVault(tx.user_id, tx.vault_id, amountSats);
-        await execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
-          [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Mobile Money vault deposit confirmed"]
-        );
-        await execute(
-          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
-          [tx.user_id, "Vault deposit confirmed",
-           `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been added to your vault.`]
-        );
-      } else {
-        await creditWallet(tx.user_id, amountSats);
-        await execute(
-          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
-          [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Mobile Money deposit confirmed"]
-        );
-        await execute(
-          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
-          [tx.user_id, "Deposit confirmed",
-           `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been confirmed.`]
-        );
-      }
+        if (tx.vault_id) {
+          await db.execute(
+            `UPDATE wallets SET vault_sats=vault_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+            [amountSats, tx.user_id]
+          );
+          await db.execute(
+            `UPDATE vaults SET current_sats=current_sats+$1, last_deposit_at=NOW(), updated_at=NOW()
+             WHERE id=$2 AND user_id=$3 AND status='active'`,
+            [amountSats, tx.vault_id, tx.user_id]
+          );
+          await db.execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'vault_deposit',$2,$3)`,
+            [tx.user_id, `Added ${amountSats.toLocaleString()} sats to vault`, "Mobile Money vault deposit confirmed"]
+          );
+          await db.execute(
+            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+            [tx.user_id, "Vault deposit confirmed",
+             `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been added to your vault.`]
+          );
+        } else {
+          await db.execute(
+            `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+            [amountSats, tx.user_id]
+          );
+          await db.execute(
+            `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'deposit',$2,$3)`,
+            [tx.user_id, `Added ${amountSats.toLocaleString()} sats`, "Mobile Money deposit confirmed"]
+          );
+          await db.execute(
+            `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'deposit',$2,$3)`,
+            [tx.user_id, "Deposit confirmed",
+             `Your MoMo deposit of ${amountSats.toLocaleString()} sats has been confirmed.`]
+          );
+        }
+      });
     } else if (tx.type === "send") {
-      // MoMo withdrawal confirmed by Lipila
-      await execute(
-        `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
-        [canonicalExternalId, tx.id]
-      );
-      await execute(
-        `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
-        [tx.user_id, `Sent ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal confirmed"]
-      );
-      await execute(
-        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
-        [tx.user_id, "Withdrawal confirmed", `Your Mobile Money payout has been sent successfully.`]
-      );
+      // MoMo withdrawal confirmed by Lipila — atomic confirm + activity log
+      await withTransaction(async (db) => {
+        await db.execute(
+          `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+          [canonicalExternalId, tx.id]
+        );
+        await db.execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw',$2,$3)`,
+          [tx.user_id, `Sent ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal confirmed"]
+        );
+        await db.execute(
+          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'withdraw',$2,$3)`,
+          [tx.user_id, "Withdrawal confirmed", `Your Mobile Money payout has been sent successfully.`]
+        );
+      });
     } else {
       await execute(
         `UPDATE transactions SET status='confirmed', external_id=$1, updated_at=NOW() WHERE id=$2`,
@@ -258,27 +275,39 @@ export async function handleLipilaWebhook(request: Request): Promise<Response> {
       );
     }
   } else if (rawStatus === "FAILED" || rawStatus === "CANCELLED") {
-    await execute(
-      `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
-      [canonicalExternalId, tx.id]
-    );
     if (tx.type === "send") {
-      // Refund user sats — payout did not go through
-      await execute(
-        `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
-        [Number(tx.amount_sats), tx.user_id]
-      );
-      await execute(
-        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
-        [tx.user_id, "Withdrawal failed",
-         "Your Mobile Money payout could not be completed. Your sats have been refunded."]
-      );
+      // Atomic: mark failed + refund sats
+      await withTransaction(async (db) => {
+        await db.execute(
+          `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+          [canonicalExternalId, tx.id]
+        );
+        await db.execute(
+          `UPDATE wallets SET available_sats=available_sats+$1, updated_at=NOW() WHERE user_id=$2`,
+          [amountSats, tx.user_id]
+        );
+        await db.execute(
+          `INSERT INTO activity_logs(user_id, action, title, meta) VALUES($1,'withdraw_failed',$2,$3)`,
+          [tx.user_id, `Refunded ${amountSats.toLocaleString()} sats`, "Mobile Money withdrawal failed"]
+        );
+        await db.execute(
+          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
+          [tx.user_id, "Withdrawal failed",
+           "Your Mobile Money payout could not be completed. Your sats have been refunded."]
+        );
+      });
     } else {
-      await execute(
-        `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
-        [tx.user_id, "Deposit failed",
-         "Your Mobile Money deposit could not be completed. Please try again."]
-      );
+      await withTransaction(async (db) => {
+        await db.execute(
+          `UPDATE transactions SET status='failed', external_id=$1, updated_at=NOW() WHERE id=$2`,
+          [canonicalExternalId, tx.id]
+        );
+        await db.execute(
+          `INSERT INTO notifications(user_id, kind, title, body) VALUES($1,'failed',$2,$3)`,
+          [tx.user_id, "Deposit failed",
+           "Your Mobile Money deposit could not be completed. Please try again."]
+        );
+      });
     }
   }
 
