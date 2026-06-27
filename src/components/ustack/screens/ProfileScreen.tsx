@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronRight, Fingerprint, Bell, ShieldCheck, HelpCircle, Info, LogOut, Lock, Zap } from "lucide-react";
 import { useAuth } from "@/lib/context/auth-context";
+import { useSecurityStatus, useSetBiometric } from "@/lib/hooks/useAppData";
 
 export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
   onEdit: () => void;
@@ -10,7 +10,9 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
   onLogout: () => void;
 }) {
   const { user, profile } = useAuth();
-  const [biometrics, setBiometrics] = useState(false);
+  const { data: security } = useSecurityStatus();
+  const setBiometricMut = useSetBiometric();
+  const biometrics = security?.biometricEnabled ?? false;
 
   const displayName = profile?.display_name ?? user?.username ?? "—";
   const initials = profile?.avatar_initials ?? user?.username?.slice(0, 2).toUpperCase() ?? "??";
@@ -61,7 +63,7 @@ export function ProfileScreen({ onEdit, onSettings, onHelp, onLogout }: {
 
       {/* Security */}
       <Section title="Security">
-        <Row icon={Fingerprint} label="Biometrics" right={<Toggle on={biometrics} onChange={setBiometrics} />} />
+        <Row icon={Fingerprint} label="Biometrics" right={<Toggle on={biometrics} onChange={(v) => setBiometricMut.mutate({ enabled: v })} />} />
         <Row icon={Lock} label="App PIN" right={<ChevronRight className="w-4 h-4 text-muted-foreground" />} onClick={onSettings} />
       </Section>
 
