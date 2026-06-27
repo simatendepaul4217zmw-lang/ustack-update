@@ -48,3 +48,9 @@ id = "smNowvx9EqrEdMEvMwkIY"
 uri = "file://exports/ustack_full_export.zip"
 type = "unspecified"
 title = "UStack Full Export .zip — Reference + Full Database"
+
+[[outputs]]
+id = "aP6iIf1uC76HRDx7vYQEV"
+uri = "file://ustack-export.zip"
+type = "unspecified"
+title = "UStack Export (DB + codebase)"
