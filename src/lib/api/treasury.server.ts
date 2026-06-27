@@ -72,9 +72,19 @@ export async function swapBtcToUsd(): Promise<string> {
     getTreasuryBalances(),
   ]);
 
+  // Blink stablesats rejects intra-ledger amounts below ~1 000 sats.
+  // Return "noop-low-balance" so executeProtect can still advance state
+  // to 'usd' mode and log the transition without crashing the loop.
+  const MINIMUM_SWAP_SATS = 1_000;
+
   if (balances.btcSats <= 0) {
     console.log("[treasury] swapBtcToUsd: nothing to swap (btcSats=0)");
     return "noop";
+  }
+
+  if (balances.btcSats < MINIMUM_SWAP_SATS) {
+    console.warn(`[treasury] swapBtcToUsd: BTC balance ${balances.btcSats} sats is below ${MINIMUM_SWAP_SATS}-sat minimum — skipping swap, advancing mode`);
+    return "noop-low-balance";
   }
 
   console.log(`[treasury] swapBtcToUsd: swapping 100% of BTC balance — ${balances.btcSats} sats → USD stablesats`);
