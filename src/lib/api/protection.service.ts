@@ -12,7 +12,10 @@ async function notifyAllUsers(type: "protect" | "recover") {
 
   await execute(
     `INSERT INTO notifications (user_id, kind, title, body)
-     SELECT id, 'price_protection', $1, $2 FROM users`,
+     SELECT u.id, 'price_protection', $1, $2
+     FROM users u
+     JOIN price_protection pp ON pp.user_id = u.id
+     WHERE pp.enabled = true`,
     [title, body]
   );
 }

@@ -101,7 +101,7 @@ export function DepositSheet({
     else setStep("vault");
   };
 
-  const selectVault = (v: Vault) => { setSelectedVault(v); setStep("method"); setTab("lightning"); };
+  const selectVault = (v: Vault) => { setSelectedVault(v); setStep("method"); };
   const destLabel = dest === "balance" ? "Available Balance" : selectedVault?.name ?? "Vault";
 
   const canConfirm = () => {
