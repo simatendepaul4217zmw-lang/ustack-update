@@ -116,7 +116,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
             <div className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center mb-2" style={{ color: "oklch(0.82 0.17 140)" }}>
               <Lock className="w-7 h-7" />
             </div>
-            <p className="text-sm text-muted-foreground text-center mb-4">Choose a 4-digit PIN to protect your transactions</p>
+            <p className="text-sm text-muted-foreground text-center mb-4">Choose a 4-digit PIN to secure your account</p>
             <PinPad pin={pin} onChange={setPin} onComplete={handleNewComplete} error={error} disabled={isPending} />
           </motion.div>
         )}
@@ -164,7 +164,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
             <div>
               <div className="text-lg font-semibold mb-2">Enable Fingerprint?</div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                Use your fingerprint to authorize transactions instead of entering your PIN each time. Only available on the mobile app.
+                Use your fingerprint to unlock the app and confirm transfers instead of entering your PIN. Only available on the mobile app.
               </p>
             </div>
             <div className="flex flex-col gap-3 w-full mt-2">
@@ -192,7 +192,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
               <div className="text-xl font-semibold">{isChange ? "PIN updated!" : "You're protected!"}</div>
               <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">
                 {isChange
-                  ? "Your transaction PIN has been changed successfully."
+                  ? "Your PIN has been changed successfully."
                   : "All fund movements now require your PIN or fingerprint."}
               </p>
             </div>

@@ -13,7 +13,7 @@ interface PinEntrySheetProps {
   description?: string;
 }
 
-export function PinEntrySheet({ open, onClose, onAuthorized, title = "Authorize", description = "Enter your PIN to continue" }: PinEntrySheetProps) {
+export function PinEntrySheet({ open, onClose, onAuthorized, title = "Confirm", description = "Enter your PIN to continue" }: PinEntrySheetProps) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const { data: security } = useSecurityStatus();
@@ -44,7 +44,7 @@ export function PinEntrySheet({ open, onClose, onAuthorized, title = "Authorize"
           </div>
           <div className="text-lg font-semibold">Too many attempts</div>
           <p className="text-sm text-muted-foreground max-w-xs">
-            Transactions are locked for {mins} more minute{mins !== 1 ? "s" : ""} due to multiple failed PIN attempts.
+            Transfers are locked for {mins} more minute{mins !== 1 ? "s" : ""} due to multiple failed PIN attempts.
           </p>
           <button onClick={onClose} className="mt-4 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
             Got it

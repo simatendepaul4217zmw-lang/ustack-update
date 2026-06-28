@@ -429,7 +429,7 @@ export function WithdrawSheet({
             <div className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
               <ShieldCheck className="w-7 h-7" />
             </div>
-            <p className="text-sm text-muted-foreground text-center">Enter your PIN to authorize this transfer</p>
+            <p className="text-sm text-muted-foreground text-center">Enter your PIN to confirm this transfer</p>
             <PinPad pin={authPin} onChange={setAuthPin} onComplete={handleAuthComplete} error={authError} disabled={verifyPin.isPending} />
           </motion.div>
         )}

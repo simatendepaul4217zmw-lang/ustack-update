@@ -111,7 +111,7 @@ export function SettingsSheet({
             )}
             <Row
               icon={ShieldAlert}
-              label={security?.pinEnabled ? "Change PIN" : "Set up 4-digit PIN"}
+              label={security?.pinEnabled ? "Change PIN" : "Set up PIN"}
               right={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
               onClick={() => onOpenSecurity?.("pin")}
             />
