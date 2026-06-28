@@ -32,12 +32,14 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
   const totalSats = wallet?.totalSats ?? 0;
   const lockedSats = wallet?.lockedVaultSats ?? 0;
   const availableSats = (wallet?.availableSats ?? 0) + (wallet?.openVaultSats ?? 0);
-
-  const monthlyStacked = vaults.reduce((sum, v) => sum + v.currentSats, 0);
-  const monthlyGoal = vaults.reduce((sum, v) => sum + v.goalSats, 0) || 1;
+  const totalDeposited = wallet?.totalDeposited ?? 0;
 
   const lockedVaultCount = vaults.filter(v => v.locked).length;
   const openVaultCount = vaults.filter(v => !v.locked).length;
+
+  const growthSats = totalSats - totalDeposited;
+  const growthPct = totalDeposited > 0 ? (growthSats / totalDeposited) * 100 : 0;
+  const growthBarPct = Math.min(Math.max(growthPct, 0), 100);
 
   return (
     <div className="px-4 pt-1 flex flex-col gap-4">
@@ -83,22 +85,25 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
 
         <div className="relative mt-4">
           <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-            <span>Vault progress</span>
-            <span>{Math.round((monthlyStacked / monthlyGoal) * 100)}%</span>
+            <span>Growth</span>
+            <span className={growthPct >= 0 ? "text-[oklch(0.78_0.14_170)]" : "text-[oklch(0.68_0.22_10)]"}>
+              {growthPct >= 0 ? "+" : ""}{growthPct.toFixed(1)}%
+            </span>
           </div>
           <div className="h-1 rounded-full bg-white/10 overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${Math.min((monthlyStacked / monthlyGoal) * 100, 100)}%` }}
+              animate={{ width: `${growthBarPct}%` }}
               transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-              className="h-full bg-primary"
+              className="h-full"
+              style={{ background: growthPct >= 0 ? "oklch(0.78 0.14 170)" : "oklch(0.68 0.22 10)" }}
             />
           </div>
-          {vaults.length > 0 && (
-            <div className="mt-1 text-[9px] text-muted-foreground/60">
-              {fmtSats(monthlyStacked)} sats added · {vaults.length} vault{vaults.length !== 1 ? "s" : ""}
-            </div>
-          )}
+          <div className="mt-1 text-[9px] text-muted-foreground/60">
+            {totalDeposited > 0
+              ? `${fmtSats(totalDeposited)} deposited · ${fmtSats(totalSats)} now`
+              : "No deposits yet"}
+          </div>
         </div>
 
         <div className="relative mt-3 flex items-center justify-between pt-3 border-t border-white/8">

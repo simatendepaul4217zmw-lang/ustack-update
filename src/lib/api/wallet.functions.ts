@@ -14,6 +14,7 @@ export const getWallet = createServerFn({ method: "POST" })
       vault_sats: string;
       locked_vault_sats: string;
       open_vault_sats: string;
+      total_deposited: string;
     }>(
       `SELECT w.available_sats, w.vault_sats,
        COALESCE(SUM(CASE
@@ -25,7 +26,11 @@ export const getWallet = createServerFn({ method: "POST" })
          WHEN v.vault_type = 'hodl' AND (v.locked_until IS NULL OR v.locked_until <= NOW()) THEN v.current_sats
          WHEN v.vault_type = 'stack' AND v.current_sats >= v.goal_sats THEN v.current_sats
          ELSE 0
-       END), 0)::bigint AS open_vault_sats
+       END), 0)::bigint AS open_vault_sats,
+       COALESCE((
+         SELECT SUM(amount_sats) FROM transactions
+         WHERE user_id = $1 AND type = 'deposit' AND status = 'confirmed'
+       ), 0)::bigint AS total_deposited
        FROM wallets w
        LEFT JOIN vaults v ON v.user_id = w.user_id AND v.status = 'active'
        WHERE w.user_id = $1
@@ -40,6 +45,7 @@ export const getWallet = createServerFn({ method: "POST" })
       lockedVaultSats: Number(wallet.locked_vault_sats),
       openVaultSats: Number(wallet.open_vault_sats),
       totalSats: Number(wallet.available_sats) + Number(wallet.vault_sats),
+      totalDeposited: Number(wallet.total_deposited),
     };
   });
 
