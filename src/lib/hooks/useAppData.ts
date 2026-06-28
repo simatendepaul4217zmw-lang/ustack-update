@@ -7,7 +7,7 @@ import { getBtcPrice } from "@/lib/api/price.functions";
 import { createInvoice, sendPayment, sendOnChainPayment, estimateOnChainFee, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus, confirmMockInvoice } from "@/lib/api/lightning.functions";
 import { updateProfile } from "@/lib/api/auth.functions";
 import { getPriceProtection, updatePriceProtection } from "@/lib/api/priceprotection.functions";
-import { getSecurityStatus, setupPin, changePin, verifyPin, setBiometric } from "@/lib/api/security.functions";
+import { getSecurityStatus, setupPin, changePin, verifyPin, unlockWithPin, setBiometric } from "@/lib/api/security.functions";
 
 // ── Wallet ────────────────────────────────────────────────────────────────────
 
@@ -308,6 +308,13 @@ export function useVerifyPin() {
   const { token } = useAuth();
   return useMutation({
     mutationFn: (vars: { pin: string }) => verifyPin({ data: { token: token!, ...vars } }),
+  });
+}
+
+export function useUnlockWithPin() {
+  const { token } = useAuth();
+  return useMutation({
+    mutationFn: (vars: { pin: string }) => unlockWithPin({ data: { token: token!, ...vars } }),
   });
 }
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Fingerprint, Lock } from "lucide-react";
 import { PinPad } from "./PinPad";
-import { useVerifyPin, useSecurityStatus } from "@/lib/hooks/useAppData";
+import { useUnlockWithPin, useSecurityStatus } from "@/lib/hooks/useAppData";
 import { tryBiometricAuth } from "@/lib/native";
 
 interface AppLockProps {
@@ -11,7 +11,7 @@ interface AppLockProps {
 
 export function AppLock({ onUnlocked }: AppLockProps) {
   const { data: security } = useSecurityStatus();
-  const verifyPin = useVerifyPin();
+  const unlockPin = useUnlockWithPin();
 
   const [mode, setMode] = useState<"biometric" | "pin">("biometric");
   const [pin, setPin] = useState("");
@@ -49,7 +49,7 @@ export function AppLock({ onUnlocked }: AppLockProps) {
   const handlePinComplete = async (entered: string) => {
     setError("");
     try {
-      await verifyPin.mutateAsync({ pin: entered });
+      await unlockPin.mutateAsync({ pin: entered });
       onUnlocked();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Incorrect PIN");
@@ -128,7 +128,7 @@ export function AppLock({ onUnlocked }: AppLockProps) {
               onChange={setPin}
               onComplete={handlePinComplete}
               error={error}
-              disabled={verifyPin.isPending}
+              disabled={unlockPin.isPending}
             />
 
             {security?.biometricEnabled && (

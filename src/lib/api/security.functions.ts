@@ -114,6 +114,45 @@ export const changePin = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// Unlock the app after timeout — verifies PIN but does NOT log "Transaction authorized"
+export const unlockWithPin = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ token: z.string(), pin: z.string().length(4).regex(/^\d{4}$/) }))
+  .handler(async ({ data }) => {
+    const payload = await verifyToken(data.token);
+    if (!payload) throw new Error("Unauthorized");
+
+    const profile = await queryOne<{
+      transaction_pin_hash: string | null;
+      transaction_lock_until: string | null;
+      failed_pin_attempts: number;
+    }>(
+      `SELECT transaction_pin_hash, transaction_lock_until, failed_pin_attempts FROM profiles WHERE user_id=$1`,
+      [payload.sub]
+    );
+
+    if (profile?.transaction_lock_until && new Date(profile.transaction_lock_until) > new Date()) {
+      const mins = Math.ceil((new Date(profile.transaction_lock_until).getTime() - Date.now()) / 60000);
+      throw new Error(`Account locked. Try again in ${mins} minute(s).`);
+    }
+
+    if (!profile?.transaction_pin_hash) throw new Error("No PIN configured. Set up a PIN first.");
+
+    const valid = await verifyPinHash(data.pin, profile.transaction_pin_hash);
+    if (!valid) {
+      const attempts = (profile.failed_pin_attempts ?? 0) + 1;
+      if (attempts >= 5) {
+        const lockUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+        await execute(`UPDATE profiles SET failed_pin_attempts=$1, transaction_lock_until=$2 WHERE user_id=$3`, [attempts, lockUntil, payload.sub]);
+        throw new Error("Too many incorrect attempts. Locked for 30 minutes.");
+      }
+      await execute(`UPDATE profiles SET failed_pin_attempts=$1 WHERE user_id=$2`, [attempts, payload.sub]);
+      throw new Error(`Incorrect PIN. ${5 - attempts} attempt(s) left.`);
+    }
+
+    await execute(`UPDATE profiles SET failed_pin_attempts=0, transaction_lock_until=NULL WHERE user_id=$1`, [payload.sub]);
+    return { ok: true };
+  });
+
 export const verifyPin = createServerFn({ method: "POST" })
   .inputValidator(z.object({ token: z.string(), pin: z.string().length(4).regex(/^\d{4}$/) }))
   .handler(async ({ data }) => {
