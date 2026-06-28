@@ -156,13 +156,6 @@ function LockScreen({ children }: { children: React.ReactNode }) {
       transition={{ duration: 0.2 }}
       className="absolute inset-0 z-[200] bg-background flex flex-col items-center justify-center gap-8 px-8"
     >
-      <div className="flex flex-col items-center gap-2 mb-4">
-        <div className="w-16 h-16 rounded-2xl bg-card border border-white/10 flex items-center justify-center mb-1">
-          <span className="text-2xl font-black tracking-tight" style={{ color: "oklch(0.82 0.17 140)" }}>U</span>
-        </div>
-        <p className="text-lg font-bold tracking-tight">UStack</p>
-        <p className="text-xs text-muted-foreground">Your Bitcoin is safe</p>
-      </div>
       {children}
     </motion.div>
   );
