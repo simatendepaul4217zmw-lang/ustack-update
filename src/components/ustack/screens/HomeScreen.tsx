@@ -36,6 +36,9 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
   const monthlyStacked = vaults.reduce((sum, v) => sum + v.currentSats, 0);
   const monthlyGoal = vaults.reduce((sum, v) => sum + v.goalSats, 0) || 1;
 
+  const lockedVaultCount = vaults.filter(v => v.locked).length;
+  const openVaultCount = vaults.filter(v => !v.locked).length;
+
   return (
     <div className="px-4 pt-1 flex flex-col gap-4">
       {/* Greeting */}
@@ -74,8 +77,8 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
         )}
 
         <div className="relative mt-4 grid grid-cols-2 gap-2">
-          <Stat label="Locked" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtValue(lockedSats, priceZmw)} accent="rose" />
-          <Stat label="Available" value={hidden ? "•••" : fmtSats(availableSats)} zmw={hidden ? undefined : fmtValue(availableSats, priceZmw)} accent="teal" />
+          <Stat label="Locked" value={hidden ? "•••" : fmtSats(lockedSats)} zmw={hidden ? undefined : fmtValue(lockedSats, priceZmw)} accent="rose" sub={lockedVaultCount > 0 ? `from ${lockedVaultCount} vault${lockedVaultCount !== 1 ? "s" : ""}` : undefined} />
+          <Stat label="Available" value={hidden ? "•••" : fmtSats(availableSats)} zmw={hidden ? undefined : fmtValue(availableSats, priceZmw)} accent="teal" sub={openVaultCount > 0 ? `from ${openVaultCount} vault${openVaultCount !== 1 ? "s" : ""}` : undefined} />
         </div>
 
         <div className="relative mt-4">
@@ -91,6 +94,11 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
               className="h-full bg-primary"
             />
           </div>
+          {vaults.length > 0 && (
+            <div className="mt-1 text-[9px] text-muted-foreground/60">
+              {fmtSats(monthlyStacked)} sats added · {vaults.length} vault{vaults.length !== 1 ? "s" : ""}
+            </div>
+          )}
         </div>
 
         <div className="relative mt-3 flex items-center justify-between pt-3 border-t border-white/8">
@@ -185,7 +193,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
   );
 }
 
-function Stat({ label, value, zmw, accent }: { label: string; value: string; zmw?: string; accent: string }) {
+function Stat({ label, value, zmw, sub, accent }: { label: string; value: string; zmw?: string; sub?: string; accent: string }) {
   const dotColor = accent === "teal" ? "oklch(0.78 0.14 170)" : "oklch(0.68 0.22 10)";
   return (
     <div className="rounded-xl bg-white/5 px-3 py-2.5">
@@ -194,6 +202,7 @@ function Stat({ label, value, zmw, accent }: { label: string; value: string; zmw
       </div>
       <div className="text-sm font-semibold mt-0.5 tabular-nums">{value}</div>
       {zmw && <div className="text-[9px] text-muted-foreground/70 tabular-nums">{zmw}</div>}
+      {sub && <div className="text-[9px] text-muted-foreground/50 mt-0.5">{sub}</div>}
     </div>
   );
 }
