@@ -186,16 +186,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
           {tab === "price" && <PriceTab btcPrice={btcPrice} fmtValue={fmtValue} />}
           {tab === "insights" && <Insights vaults={vaults} />}
           {tab === "updates" && <Updates />}
-          {tab === "tips" && (
-            <div className="flex flex-col gap-2">
-              {tips.map((t, i) => (
-                <div key={i} className="rounded-xl glass p-3.5">
-                  <div className="text-xs font-semibold">{t.title}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{t.body}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {tab === "tips" && <Tips />}
         </div>
       </div>
     </div>
@@ -298,12 +289,16 @@ function Insights({ vaults }: { vaults: Vault[] }) {
 interface Transaction { id: string; type: string; amountSats: number; status: string; method: string | null; when: string; }
 
 function TransactionHistory({ transactions }: { transactions: Transaction[] }) {
+  const [expanded, setExpanded] = useState(false);
   if (transactions.length === 0) return (
     <div className="text-center text-muted-foreground text-sm py-8">No transactions yet.</div>
   );
+  const LIMIT = 6;
+  const visible = expanded ? transactions : transactions.slice(0, LIMIT);
+  const hasMore = transactions.length > LIMIT;
   return (
     <div className="flex flex-col gap-2">
-      {transactions.map((t) => {
+      {visible.map((t) => {
         const isDebit = t.type === "withdraw" || t.type === "send";
         const Icon = isDebit ? ArrowUpRight : ArrowDownLeft;
         const color = isDebit ? "oklch(0.68 0.22 10)" : "oklch(0.78 0.14 170)";
@@ -326,19 +321,30 @@ function TransactionHistory({ transactions }: { transactions: Transaction[] }) {
           </div>
         );
       })}
+      {hasMore && (
+        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-primary font-medium py-2 text-center">
+          {expanded ? "Show less" : "View all"}
+        </button>
+      )}
     </div>
   );
 }
 
 function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: number; priceZmw: number } | undefined; fmtValue: (sats: number, priceZmw?: number) => string }) {
+  const [expanded, setExpanded] = useState(false);
   const priceUsd = btcPrice?.priceUsd ?? 0;
   const priceZmw = btcPrice?.priceZmw ?? 0;
   const snapshots = [
-    { label: "7d ago",  change: -3.1 },
-    { label: "14d ago", change: -6.4 },
-    { label: "30d ago", change: -11.2 },
-    { label: "90d ago", change: -22.4 },
+    { label: "7d ago",   change: -3.1 },
+    { label: "14d ago",  change: -6.4 },
+    { label: "30d ago",  change: -11.2 },
+    { label: "90d ago",  change: -22.4 },
+    { label: "180d ago", change: -31.7 },
+    { label: "1yr ago",  change: -44.2 },
   ];
+  const LIMIT = 3;
+  const visible = expanded ? snapshots : snapshots.slice(0, LIMIT);
+  const hasMore = snapshots.length > LIMIT;
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-xl bg-card/60 p-4 flex items-center justify-between gap-3">
@@ -363,7 +369,7 @@ function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: num
         </div>
       </div>
       <div className="text-[10px] text-muted-foreground px-0.5">Change vs today</div>
-      {snapshots.map((s) => {
+      {visible.map((s) => {
         const pastPrice = priceUsd > 0 ? Math.round(priceUsd / (1 - s.change / 100)) : 0;
         const up = s.change >= 0;
         return (
@@ -381,6 +387,11 @@ function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: num
           </div>
         );
       })}
+      {hasMore && (
+        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-primary font-medium py-2 text-center">
+          {expanded ? "Show less" : "View all"}
+        </button>
+      )}
     </div>
   );
 }
@@ -419,7 +430,29 @@ function Updates() {
           onClick={() => setExpanded((v) => !v)}
           className="text-xs text-primary font-medium py-2 text-center"
         >
-          {expanded ? "Show less" : `View all ${items.length} updates`}
+          {expanded ? "Show less" : "View all"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Tips() {
+  const [expanded, setExpanded] = useState(false);
+  const LIMIT = 6;
+  const visible = expanded ? tips : tips.slice(0, LIMIT);
+  const hasMore = tips.length > LIMIT;
+  return (
+    <div className="flex flex-col gap-2">
+      {visible.map((t, i) => (
+        <div key={i} className="rounded-xl glass p-3.5">
+          <div className="text-xs font-semibold">{t.title}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{t.body}</div>
+        </div>
+      ))}
+      {hasMore && (
+        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-primary font-medium py-2 text-center">
+          {expanded ? "Show less" : "View all"}
         </button>
       )}
     </div>
