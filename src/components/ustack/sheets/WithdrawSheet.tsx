@@ -258,6 +258,9 @@ export function WithdrawSheet({
         {/* Step 2b: Hodl locked — no exit */}
         {step === "locked" && vault && (
           <motion.div key="locked" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+            {!vaultContext && (
+              <button onClick={() => setStep("vault")} className="flex items-center gap-1 text-xs text-muted-foreground mb-4"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
+            )}
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5 flex flex-col items-center text-center gap-3">
               <div className="w-16 h-16 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.73 0.19 55)" }}><Lock className="w-8 h-8" /></div>
               <div className="text-base font-semibold">Hodl Vault: No Early Exit</div>

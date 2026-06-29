@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Fingerprint, Bell, Trash2, ChevronRight, Sun, Moon, Loader2, ShieldCheck, ShieldOff, ShieldAlert } from "lucide-react";
+import { Fingerprint, Bell, Trash2, ChevronRight, Sun, Moon, Loader2, ShieldCheck, ShieldOff, ShieldAlert, ArrowLeft } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { useTheme } from "@/lib/theme-context";
 import { useCurrency, type Currency } from "@/lib/currency-context";
@@ -92,7 +92,7 @@ export function SettingsSheet({
     <Sheet open={open} onClose={close} title={section === "main" ? "Settings" : "Notifications"}>
       {section !== "main" && (
         <button onClick={() => setSection("main")} className="flex items-center gap-1.5 text-xs text-muted-foreground mb-5 -mt-1">
-          ← Back
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>
       )}
 
