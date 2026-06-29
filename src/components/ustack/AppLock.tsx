@@ -115,7 +115,7 @@ export function AppLock({ onUnlocked }: AppLockProps) {
             className="flex flex-col items-center gap-4 w-full"
           >
             <div
-              className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center mb-2"
+              className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center mb-2 -mt-8"
               style={{ color: "oklch(0.82 0.17 140)" }}
             >
               <Lock className="w-7 h-7" />
@@ -123,6 +123,7 @@ export function AppLock({ onUnlocked }: AppLockProps) {
             <p className="text-base font-semibold">Enter your PIN</p>
             <p className="text-sm text-muted-foreground">Enter your 4-digit PIN to unlock</p>
 
+            <div className="mt-6 w-full">
             <PinPad
               pin={pin}
               onChange={setPin}
@@ -131,6 +132,7 @@ export function AppLock({ onUnlocked }: AppLockProps) {
               disabled={unlockPin.isPending}
               onBiometric={security?.biometricEnabled ? () => { setBiometricFailed(false); setMode("biometric"); setTimeout(attemptBiometric, 100); } : undefined}
             />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
