@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Delete, Fingerprint } from "lucide-react";
+import { Delete, Fingerprint, CornerDownLeft } from "lucide-react";
 
 interface PinPadProps {
   pin: string;
@@ -63,20 +63,19 @@ export function PinPad({ pin, onChange, onComplete, onBiometric, length = 4, err
 
       {/* Keypad */}
       <div className="grid grid-cols-3 gap-3 w-full">
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9, "del" as const, 0, null].map((k, i) =>
-          k === null ? (
-            <div key={i} />
-          ) : (
-            <button
-              key={i}
-              onClick={() => handleKey(k as number | "del")}
-              disabled={disabled}
-              className="h-14 rounded-2xl glass text-lg font-semibold flex items-center justify-center transition active:scale-90 active:bg-white/10 disabled:opacity-30"
-            >
-              {k === "del" ? <Delete className="w-5 h-5" /> : k}
-            </button>
-          )
-        )}
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, "del" as const, 0, "enter" as const].map((k, i) => (
+          <button
+            key={i}
+            onClick={() => {
+              if (k === "enter") { if (pin.length === length) onComplete?.(pin); }
+              else handleKey(k as number | "del");
+            }}
+            disabled={disabled || (k === "enter" && pin.length < length)}
+            className="h-14 rounded-2xl glass text-lg font-semibold flex items-center justify-center transition active:scale-90 active:bg-white/10 disabled:opacity-30"
+          >
+            {k === "del" ? <Delete className="w-5 h-5" /> : k === "enter" ? <CornerDownLeft className="w-5 h-5" /> : k}
+          </button>
+        ))}
       </div>
 
       {/* Fingerprint */}
