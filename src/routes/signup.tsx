@@ -64,7 +64,7 @@ function Signup() {
   if (step === "done") {
     return (
       <PhoneFrame>
-        <div className="h-full min-h-screen md:min-h-[860px] flex flex-col items-center justify-center gap-6 bg-background">
+        <div className="h-full flex flex-col items-center justify-center gap-6 bg-background">
           <motion.div initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 180, damping: 14 }}>
             <div className="w-28 h-28 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.86 0.13 160)" }}>
               <ShieldCheck className="w-14 h-14" />
@@ -81,8 +81,8 @@ function Signup() {
 
   return (
     <PhoneFrame>
-      <div className="h-full min-h-screen md:min-h-[860px] flex flex-col bg-background">
-        <div className="flex flex-col flex-1 px-7 pt-14 pb-10">
+      <div className="h-full flex flex-col bg-background">
+        <div className="flex flex-col flex-1 px-7 pt-12 pb-10">
           <button onClick={goBack} className="w-10 h-10 rounded-full glass flex items-center justify-center self-start">
             <ArrowLeft className="w-5 h-5" />
           </button>

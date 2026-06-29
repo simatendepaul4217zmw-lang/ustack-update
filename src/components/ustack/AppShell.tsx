@@ -127,7 +127,7 @@ export function AppShell() {
     <div className={`min-h-screen w-full bg-background flex items-center justify-center md:p-8 relative overflow-hidden${alertTheme ? " theme-alert" : ""}`}>
 
       {/* phone container */}
-      <div className="relative w-full md:w-[420px] md:h-[860px] h-screen md:rounded-[3rem] overflow-hidden md:border md:border-white/10 md:shadow-float bg-background">
+      <div className="relative w-full md:w-[420px] md:h-[860px] h-[100dvh] md:rounded-[3rem] overflow-hidden md:border md:border-white/10 md:shadow-float bg-background">
         <SideDrawer
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}

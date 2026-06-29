@@ -42,7 +42,7 @@ function Onboarding() {
 
   return (
     <PhoneFrame>
-      <div className="h-full min-h-screen md:min-h-[860px] flex flex-col px-7 pt-12 pb-8 bg-background relative overflow-hidden">
+      <div className="h-full flex flex-col px-7 pt-12 pb-10 bg-background relative overflow-hidden">
         <div className="flex justify-between items-center">
           <div className="text-xs text-muted-foreground">{i + 1} / {slides.length}</div>
           <Link to="/signup" className="text-sm text-muted-foreground">Skip</Link>

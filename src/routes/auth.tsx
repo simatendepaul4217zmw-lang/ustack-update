@@ -58,7 +58,7 @@ function Auth() {
   if (step === "done") {
     return (
       <PhoneFrame>
-        <div className="h-full min-h-screen md:min-h-[860px] flex flex-col items-center justify-center gap-6 bg-background">
+        <div className="h-full flex flex-col items-center justify-center gap-6 bg-background">
           <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 200, damping: 16 }}>
             <div className="w-24 h-24 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
               <ShieldCheck className="w-12 h-12" />
@@ -75,8 +75,8 @@ function Auth() {
 
   return (
     <PhoneFrame>
-      <div className="h-full min-h-screen md:min-h-[860px] flex flex-col bg-background">
-        <div className="flex flex-col flex-1 px-7 pt-14 pb-10">
+      <div className="h-full flex flex-col bg-background">
+        <div className="flex flex-col flex-1 px-7 pt-12 pb-10">
           <button
             onClick={() => step === "otp" ? (setStep("email"), setError(""), setOtp(["","","","","",""])) : nav({ to: "/welcome" })}
             className="w-10 h-10 rounded-full glass flex items-center justify-center self-start"
