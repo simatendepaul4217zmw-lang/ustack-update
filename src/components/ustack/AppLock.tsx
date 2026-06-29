@@ -115,7 +115,7 @@ export function AppLock({ onUnlocked }: AppLockProps) {
             className="flex flex-col items-center w-full h-full"
           >
             {/* Icon + text — upper third */}
-            <div className="flex flex-col items-center gap-2 mt-[18%]">
+            <div className="flex flex-col items-center gap-2 mt-[30%]">
               <div
                 className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center"
                 style={{ color: "oklch(0.82 0.17 140)" }}
