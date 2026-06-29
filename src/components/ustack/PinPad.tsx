@@ -1,16 +1,17 @@
 import { motion } from "framer-motion";
-import { Delete } from "lucide-react";
+import { Delete, Fingerprint } from "lucide-react";
 
 interface PinPadProps {
   pin: string;
   onChange: (pin: string) => void;
   onComplete?: (pin: string) => void;
+  onBiometric?: () => void;
   length?: number;
   error?: string;
   disabled?: boolean;
 }
 
-export function PinPad({ pin, onChange, onComplete, length = 4, error, disabled }: PinPadProps) {
+export function PinPad({ pin, onChange, onComplete, onBiometric, length = 4, error, disabled }: PinPadProps) {
   const handleKey = (k: number | "del") => {
     if (disabled) return;
     if (k === "del") {
@@ -62,13 +63,13 @@ export function PinPad({ pin, onChange, onComplete, length = 4, error, disabled 
 
       {/* Keypad */}
       <div className="grid grid-cols-3 gap-3 w-full">
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9, null, 0, "del" as const].map((k, i) =>
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, "del" as const, 0, null].map((k, i) =>
           k === null ? (
             <div key={i} />
           ) : (
             <button
               key={i}
-              onClick={() => handleKey(k)}
+              onClick={() => handleKey(k as number | "del")}
               disabled={disabled}
               className="h-14 rounded-2xl glass text-lg font-semibold flex items-center justify-center transition active:scale-90 active:bg-white/10 disabled:opacity-30"
             >
@@ -77,6 +78,17 @@ export function PinPad({ pin, onChange, onComplete, length = 4, error, disabled 
           )
         )}
       </div>
+
+      {/* Fingerprint */}
+      {onBiometric && (
+        <button
+          onClick={onBiometric}
+          className="flex items-center gap-2 text-sm text-muted-foreground py-2.5 px-5 rounded-2xl glass active:scale-95 transition"
+        >
+          <Fingerprint className="w-4 h-4" style={{ color: "oklch(0.82 0.17 140)" }} />
+          Use fingerprint instead
+        </button>
+      )}
     </div>
   );
 }

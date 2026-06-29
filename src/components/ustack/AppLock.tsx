@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Fingerprint, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { PinPad } from "./PinPad";
 import { useUnlockWithPin, useSecurityStatus } from "@/lib/hooks/useAppData";
 import { tryBiometricAuth } from "@/lib/native";
@@ -129,17 +129,8 @@ export function AppLock({ onUnlocked }: AppLockProps) {
               onComplete={handlePinComplete}
               error={error}
               disabled={unlockPin.isPending}
+              onBiometric={security?.biometricEnabled ? () => { setBiometricFailed(false); setMode("biometric"); setTimeout(attemptBiometric, 100); } : undefined}
             />
-
-            {security?.biometricEnabled && (
-              <button
-                onClick={() => { setBiometricFailed(false); setMode("biometric"); setTimeout(attemptBiometric, 100); }}
-                className="mt-2 flex items-center gap-2 text-sm text-muted-foreground py-3 px-5 rounded-2xl glass"
-              >
-                <Fingerprint className="w-5 h-5" style={{ color: "oklch(0.82 0.17 140)" }} />
-                Try fingerprint again
-              </button>
-            )}
           </motion.div>
         )}
       </AnimatePresence>
