@@ -386,17 +386,25 @@ function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: num
 }
 
 function Updates() {
+  const [expanded, setExpanded] = useState(false);
   const items = [
+    { date: "Jun 29, 2026", title: "New tabs on home screen", body: "History, Price moves, and Updates tabs added to the home screen for a richer experience." },
     { date: "Jun 28, 2026", title: "PIN improvements", body: "Backspace and Enter buttons added to the PIN pad. App unlock no longer creates false security events." },
     { date: "Jun 27, 2026", title: "Growth tracker", body: "The home screen now shows real growth — your total sats vs what you deposited, so you can see your Bitcoin working." },
     { date: "Jun 25, 2026", title: "Price Protection active", body: "Automatic BTC price monitoring is live. If BTC drops 2%, your sats are shielded to USD automatically." },
+    { date: "Jun 20, 2026", title: "Vault streaks", body: "Consecutive deposit streaks are now tracked per vault. Build your habit and watch the streak grow." },
+    { date: "Jun 15, 2026", title: "Currency toggle", body: "Switch between sats, BTC, and ZMW display anytime from settings. Your balance, your format." },
     { date: "Jun 12, 2026", title: "Lightning deposits", body: "Instant deposits via the Lightning Network are now available. Deposit sats in seconds for near-zero fees." },
     { date: "Jun 10, 2026", title: "Mobile Money support", body: "Deposit kwacha via MTN or Airtel MoMo. Your kwacha is converted to sats automatically." },
+    { date: "Jun 5,  2026", title: "Vault locking", body: "Lock a vault until a target date or goal is reached so you are not tempted to withdraw early." },
     { date: "Jun 1,  2026", title: "UStack launched 🎉", body: "UStack is live for Zambian students. Stack sats, set goals, lock your future." },
   ];
+  const LIMIT = 6;
+  const visible = expanded ? items : items.slice(0, LIMIT);
+  const hasMore = items.length > LIMIT;
   return (
     <div className="flex flex-col gap-2">
-      {items.map((u, i) => (
+      {visible.map((u, i) => (
         <div key={i} className="rounded-xl glass p-3.5 flex gap-3">
           <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
           <div>
@@ -406,6 +414,14 @@ function Updates() {
           </div>
         </div>
       ))}
+      {hasMore && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs text-primary font-medium py-2 text-center"
+        >
+          {expanded ? "Show less" : `View all ${items.length} updates`}
+        </button>
+      )}
     </div>
   );
 }
