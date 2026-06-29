@@ -75,6 +75,14 @@ export const tips = [
   { title: "Name your goal", body: "Vaults with clear names, like Tuition or Laptop, are 3x more likely to be completed." },
   { title: "Lock to commit", body: "Hodl Vaults are harder to touch. That's the point. Future you will say thanks." },
   { title: "Celebrate milestones", body: "Hitting 25%, 50%, 75% matters. Discipline compounds like sats." },
+  { title: "Bitcoin doesn't sleep", body: "While you rest, your sats keep their value. No bank hours, no weekends off — Bitcoin works 24/7." },
+  { title: "Sats over kwacha", body: "Kwacha loses value over time. Sats have held their ground. Saving in Bitcoin protects your purchasing power." },
+  { title: "Think in sats, not price", body: "Don't obsess over the USD price today. Focus on stacking more sats. The price will take care of itself." },
+  { title: "Price dips are deposits on sale", body: "When BTC drops, your kwacha buys more sats. Dips are opportunities for disciplined stackers." },
+  { title: "One vault per goal", body: "Keep your tuition, laptop, and emergency fund in separate vaults. Mixed goals lead to mixed results." },
+  { title: "Protect your PIN", body: "Your PIN is the key to your stack. Never share it, never write it where others can find it." },
+  { title: "Lightning is instant", body: "Depositing via Lightning takes seconds and costs almost nothing. Use it for your regular top-ups." },
+  { title: "Start before you're ready", body: "Don't wait for the perfect moment. Even 10 sats today beats zero sats forever." },
 ];
 
 export const fmtSats = (n: number) => n.toLocaleString("en-US");
