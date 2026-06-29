@@ -156,7 +156,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
 
       {/* Tabs */}
       <div>
-        <div className="flex gap-6 px-0.5 border-b border-white/5 overflow-x-auto no-scrollbar">
+        <div className="flex gap-4 px-0.5 border-b border-white/5">
           {([
             ["activity", "Activity"],
             ["history", "History"],
