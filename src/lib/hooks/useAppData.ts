@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/context/auth-context";
 import { getWallet } from "@/lib/api/wallet.functions";
 import { getVaults, createVault, depositToVault, withdrawFromVault } from "@/lib/api/vault.functions";
-import { getActivity, getNotifications, markNotificationsRead } from "@/lib/api/activity.functions";
+import { getActivity, getNotifications, markNotificationsRead, getTransactions } from "@/lib/api/activity.functions";
 import { getBtcPrice } from "@/lib/api/price.functions";
 import { createInvoice, sendPayment, sendOnChainPayment, estimateOnChainFee, mobileMoneySend, mobileMoneyPayout, checkMomoStatus, checkInvoiceStatus, confirmMockInvoice } from "@/lib/api/lightning.functions";
 import { updateProfile } from "@/lib/api/auth.functions";
@@ -86,6 +86,16 @@ export function useActivity() {
   return useQuery({
     queryKey: ["activity", token],
     queryFn: () => getActivity({ data: { token: token!, limit: 40 } }),
+    enabled: !!token && isAuthenticated,
+    staleTime: 30_000,
+  });
+}
+
+export function useTransactions() {
+  const { token, isAuthenticated } = useAuth();
+  return useQuery({
+    queryKey: ["transactions", token],
+    queryFn: () => getTransactions({ data: { token: token!, limit: 50 } }),
     enabled: !!token && isAuthenticated,
     staleTime: 30_000,
   });

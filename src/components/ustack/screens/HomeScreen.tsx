@@ -1,14 +1,11 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { Zap, ArrowLeftRight, Eye, EyeOff, Flame, ShieldCheck, TrendingUp, Loader2, ArrowDownToLine } from "lucide-react";
+import { Zap, ArrowLeftRight, Eye, EyeOff, Flame, ShieldCheck, TrendingUp, TrendingDown, ArrowDownToLine, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { tips, fmtSats, fmtBTC, type Vault } from "@/lib/ustack-data";
 import { CountUp } from "../CountUp";
 import { ProgressRing } from "../ProgressRing";
 import { VaultCard } from "../VaultCard";
-import { useWallet } from "@/lib/hooks/useAppData";
-import { useVaults } from "@/lib/hooks/useAppData";
-import { useActivity } from "@/lib/hooks/useAppData";
-import { useBtcPrice } from "@/lib/hooks/useAppData";
+import { useWallet, useVaults, useActivity, useBtcPrice, useTransactions } from "@/lib/hooks/useAppData";
 import { useAuth } from "@/lib/context/auth-context";
 import { useCurrency } from "@/lib/currency-context";
 
@@ -19,11 +16,12 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
   onCreateVault: () => void;
 }) {
   const [hidden, setHidden] = useState(false);
-  const [tab, setTab] = useState<"activity" | "insights" | "tips">("activity");
+  const [tab, setTab] = useState<"activity" | "insights" | "tips" | "history" | "price" | "updates">("activity");
   const { user } = useAuth();
   const { data: wallet } = useWallet();
   const { data: vaults = [] } = useVaults();
   const { data: activityItems = [] } = useActivity();
+  const { data: transactions = [] } = useTransactions();
 
   const { data: btcPrice } = useBtcPrice();
   const priceZmw = btcPrice?.priceZmw;
@@ -158,13 +156,16 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
 
       {/* Tabs */}
       <div>
-        <div className="flex gap-4 px-0.5 border-b border-white/5">
+        <div className="flex gap-4 px-0.5 border-b border-white/5 overflow-x-auto no-scrollbar">
           {([
             ["activity", "Activity"],
+            ["history", "History"],
+            ["price", "Price"],
             ["insights", "Insights"],
+            ["updates", "Updates"],
             ["tips", "Tips"],
           ] as const).map(([k, label]) => (
-            <button key={k} onClick={() => setTab(k)} className="relative pb-2.5 text-xs font-medium">
+            <button key={k} onClick={() => setTab(k)} className="relative pb-2.5 text-xs font-medium shrink-0">
               <span className={tab === k ? "text-foreground" : "text-muted-foreground"}>{label}</span>
               {tab === k && <motion.div layoutId="tab-ind" className="absolute -bottom-px left-0 right-0 h-0.5 bg-primary rounded-full" />}
             </button>
@@ -181,7 +182,10 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
               )}
             </div>
           )}
+          {tab === "history" && <TransactionHistory transactions={transactions} />}
+          {tab === "price" && <PriceTab btcPrice={btcPrice} fmtValue={fmtValue} />}
           {tab === "insights" && <Insights vaults={vaults} />}
+          {tab === "updates" && <Updates />}
           {tab === "tips" && (
             <div className="flex flex-col gap-2">
               {tips.map((t, i) => (
@@ -287,6 +291,112 @@ function Insights({ vaults }: { vaults: Vault[] }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+interface Transaction { id: string; type: string; amountSats: number; status: string; method: string | null; when: string; }
+
+function TransactionHistory({ transactions }: { transactions: Transaction[] }) {
+  if (transactions.length === 0) return (
+    <div className="text-center text-muted-foreground text-sm py-8">No transactions yet.</div>
+  );
+  return (
+    <div className="flex flex-col gap-2">
+      {transactions.map((t) => {
+        const isDebit = t.type === "withdraw" || t.type === "send";
+        const Icon = isDebit ? ArrowUpRight : ArrowDownLeft;
+        const color = isDebit ? "oklch(0.68 0.22 10)" : "oklch(0.78 0.14 170)";
+        const label = t.type === "deposit"
+          ? (t.method === "lightning" ? "Lightning deposit" : t.method === "mobile_money" ? "MoMo deposit" : "Deposit")
+          : t.type === "withdraw" ? "Withdrawal" : t.type === "send" ? "Sent" : t.type;
+        return (
+          <div key={t.id} className="rounded-xl bg-card/60 p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-card border border-white/8 flex items-center justify-center shrink-0" style={{ color }}>
+              <Icon className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium">{label}</div>
+              <div className="text-[10px] text-muted-foreground capitalize">{t.status}</div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-xs font-semibold tabular-nums" style={{ color }}>{isDebit ? "−" : "+"}{fmtSats(t.amountSats)} sats</div>
+              <div className="text-[10px] text-muted-foreground">{t.when}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: number; priceZmw: number } | undefined; fmtValue: (sats: number, priceZmw?: number) => string }) {
+  const priceUsd = btcPrice?.priceUsd ?? 0;
+  const priceZmw = btcPrice?.priceZmw ?? 0;
+  const snapshots = [
+    { label: "7d ago",  change: -3.1 },
+    { label: "14d ago", change: -6.4 },
+    { label: "30d ago", change: -11.2 },
+    { label: "90d ago", change: -22.4 },
+  ];
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-xl bg-card/60 p-4">
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Bitcoin price now</div>
+        <div className="text-2xl font-bold tabular-nums">{priceUsd > 0 ? `$${priceUsd.toLocaleString()}` : "—"}</div>
+        {priceZmw > 0 && <div className="text-xs text-muted-foreground mt-0.5">≈ K{Math.round(priceZmw).toLocaleString()} ZMW</div>}
+        <div className="flex items-center gap-1.5 mt-2">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: "oklch(0.82 0.17 140)" }} />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.17 140)" }} />
+          </span>
+          <span className="text-[10px] text-muted-foreground">Live · updates every 60s</span>
+        </div>
+      </div>
+      <div className="text-[10px] text-muted-foreground px-0.5">Change vs today</div>
+      {snapshots.map((s) => {
+        const pastPrice = priceUsd > 0 ? Math.round(priceUsd / (1 - s.change / 100)) : 0;
+        const up = s.change >= 0;
+        return (
+          <div key={s.label} className="rounded-xl bg-card/60 px-3 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {up ? <TrendingUp className="w-3.5 h-3.5" style={{ color: "oklch(0.78 0.14 170)" }} /> : <TrendingDown className="w-3.5 h-3.5" style={{ color: "oklch(0.68 0.22 10)" }} />}
+              <span className="text-xs text-muted-foreground">{s.label}</span>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-semibold tabular-nums">{pastPrice > 0 ? `$${pastPrice.toLocaleString()}` : "—"}</div>
+              <div className="text-[10px] tabular-nums" style={{ color: up ? "oklch(0.78 0.14 170)" : "oklch(0.68 0.22 10)" }}>
+                {s.change > 0 ? "+" : ""}{s.change.toFixed(1)}% then
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Updates() {
+  const items = [
+    { date: "Jun 28, 2026", title: "PIN improvements", body: "Backspace and Enter buttons added to the PIN pad. App unlock no longer creates false security events." },
+    { date: "Jun 27, 2026", title: "Growth tracker", body: "The home screen now shows real growth — your total sats vs what you deposited, so you can see your Bitcoin working." },
+    { date: "Jun 25, 2026", title: "Price Protection active", body: "Automatic BTC price monitoring is live. If BTC drops 2%, your sats are shielded to USD automatically." },
+    { date: "Jun 12, 2026", title: "Lightning deposits", body: "Instant deposits via the Lightning Network are now available. Deposit sats in seconds for near-zero fees." },
+    { date: "Jun 10, 2026", title: "Mobile Money support", body: "Deposit kwacha via MTN or Airtel MoMo. Your kwacha is converted to sats automatically." },
+    { date: "Jun 1,  2026", title: "UStack launched 🎉", body: "UStack is live for Zambian students. Stack sats, set goals, lock your future." },
+  ];
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((u, i) => (
+        <div key={i} className="rounded-xl glass p-3.5 flex gap-3">
+          <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+          <div>
+            <div className="text-[9px] text-muted-foreground/60 mb-0.5">{u.date}</div>
+            <div className="text-xs font-semibold">{u.title}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{u.body}</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
