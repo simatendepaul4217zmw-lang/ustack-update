@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { Zap, ArrowLeftRight, Eye, EyeOff, Flame, ShieldCheck, TrendingUp, TrendingDown, ArrowDownToLine, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { tips, fmtSats, fmtBTC, type Vault } from "@/lib/ustack-data";
@@ -8,6 +8,7 @@ import { VaultCard } from "../VaultCard";
 import { useWallet, useVaults, useActivity, useBtcPrice, useTransactions } from "@/lib/hooks/useAppData";
 import { useAuth } from "@/lib/context/auth-context";
 import { useCurrency } from "@/lib/currency-context";
+import { AllHistoryPage, AllPricePage, AllUpdatesPage, AllTipsPage } from "./DetailPages";
 
 export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }: {
   onOpenVault: (v: Vault) => void;
@@ -17,6 +18,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
 }) {
   const [hidden, setHidden] = useState(false);
   const [tab, setTab] = useState<"activity" | "insights" | "tips" | "history" | "price" | "updates">("activity");
+  const [subScreen, setSubScreen] = useState<null | "history" | "price" | "updates" | "tips">(null);
   const { user } = useAuth();
   const { data: wallet } = useWallet();
   const { data: vaults = [] } = useVaults();
@@ -40,7 +42,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
   const growthBarPct = Math.min(Math.max(growthPct, 0), 100);
 
   return (
-    <div className="px-4 pt-1 flex flex-col gap-4">
+    <div className="relative px-4 pt-1 flex flex-col gap-4">
       {/* Greeting */}
       <div>
         <div className="text-sm text-muted-foreground">Hello, {user?.username ?? "stacker"}</div>
@@ -182,13 +184,21 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
               )}
             </div>
           )}
-          {tab === "history" && <TransactionHistory transactions={transactions} />}
-          {tab === "price" && <PriceTab btcPrice={btcPrice} fmtValue={fmtValue} />}
+          {tab === "history" && <TransactionHistory transactions={transactions} onViewAll={() => setSubScreen("history")} />}
+          {tab === "price" && <PriceTab btcPrice={btcPrice} fmtValue={fmtValue} onViewAll={() => setSubScreen("price")} />}
           {tab === "insights" && <Insights vaults={vaults} />}
-          {tab === "updates" && <Updates />}
-          {tab === "tips" && <Tips />}
+          {tab === "updates" && <Updates onViewAll={() => setSubScreen("updates")} />}
+          {tab === "tips" && <Tips onViewAll={() => setSubScreen("tips")} />}
         </div>
       </div>
+
+      {/* Detail page overlay */}
+      <AnimatePresence>
+        {subScreen === "history" && <AllHistoryPage transactions={transactions} onBack={() => setSubScreen(null)} />}
+        {subScreen === "price"   && <AllPricePage btcPrice={btcPrice} onBack={() => setSubScreen(null)} />}
+        {subScreen === "updates" && <AllUpdatesPage onBack={() => setSubScreen(null)} />}
+        {subScreen === "tips"    && <AllTipsPage onBack={() => setSubScreen(null)} />}
+      </AnimatePresence>
     </div>
   );
 }
@@ -288,13 +298,12 @@ function Insights({ vaults }: { vaults: Vault[] }) {
 
 interface Transaction { id: string; type: string; amountSats: number; status: string; method: string | null; when: string; }
 
-function TransactionHistory({ transactions }: { transactions: Transaction[] }) {
-  const [expanded, setExpanded] = useState(false);
+function TransactionHistory({ transactions, onViewAll }: { transactions: Transaction[]; onViewAll: () => void }) {
   if (transactions.length === 0) return (
     <div className="text-center text-muted-foreground text-sm py-8">No transactions yet.</div>
   );
   const LIMIT = 6;
-  const visible = expanded ? transactions : transactions.slice(0, LIMIT);
+  const visible = transactions.slice(0, LIMIT);
   const hasMore = transactions.length > LIMIT;
   return (
     <div className="flex flex-col gap-2">
@@ -322,29 +331,22 @@ function TransactionHistory({ transactions }: { transactions: Transaction[] }) {
         );
       })}
       {hasMore && (
-        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-primary font-medium py-2 text-center">
-          {expanded ? "Show less" : "View all"}
+        <button onClick={onViewAll} className="text-xs text-primary font-medium py-2 text-center">
+          View all
         </button>
       )}
     </div>
   );
 }
 
-function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: number; priceZmw: number } | undefined; fmtValue: (sats: number, priceZmw?: number) => string }) {
-  const [expanded, setExpanded] = useState(false);
+function PriceTab({ btcPrice, fmtValue: _fmtValue, onViewAll }: { btcPrice: { priceUsd: number; priceZmw: number } | undefined; fmtValue: (sats: number, priceZmw?: number) => string; onViewAll: () => void }) {
   const priceUsd = btcPrice?.priceUsd ?? 0;
   const priceZmw = btcPrice?.priceZmw ?? 0;
   const snapshots = [
     { label: "7d ago",   change: -3.1 },
     { label: "14d ago",  change: -6.4 },
     { label: "30d ago",  change: -11.2 },
-    { label: "90d ago",  change: -22.4 },
-    { label: "180d ago", change: -31.7 },
-    { label: "1yr ago",  change: -44.2 },
   ];
-  const LIMIT = 3;
-  const visible = expanded ? snapshots : snapshots.slice(0, LIMIT);
-  const hasMore = snapshots.length > LIMIT;
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-xl bg-card/60 p-4 flex items-center justify-between gap-3">
@@ -369,7 +371,7 @@ function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: num
         </div>
       </div>
       <div className="text-[10px] text-muted-foreground px-0.5">Change vs today</div>
-      {visible.map((s) => {
+      {snapshots.map((s) => {
         const pastPrice = priceUsd > 0 ? Math.round(priceUsd / (1 - s.change / 100)) : 0;
         const up = s.change >= 0;
         return (
@@ -387,17 +389,12 @@ function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: num
           </div>
         );
       })}
-      {hasMore && (
-        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-primary font-medium py-2 text-center">
-          {expanded ? "Show less" : "View all"}
-        </button>
-      )}
+      <button onClick={onViewAll} className="text-xs text-primary font-medium py-2 text-center">View all</button>
     </div>
   );
 }
 
-function Updates() {
-  const [expanded, setExpanded] = useState(false);
+function Updates({ onViewAll }: { onViewAll: () => void }) {
   const items = [
     { date: "Jun 29, 2026", title: "New tabs on home screen", body: "History, Price moves, and Updates tabs added to the home screen for a richer experience." },
     { date: "Jun 28, 2026", title: "PIN improvements", body: "Backspace and Enter buttons added to the PIN pad. App unlock no longer creates false security events." },
@@ -405,17 +402,10 @@ function Updates() {
     { date: "Jun 25, 2026", title: "Price Protection active", body: "Automatic BTC price monitoring is live. If BTC drops 2%, your sats are shielded to USD automatically." },
     { date: "Jun 20, 2026", title: "Vault streaks", body: "Consecutive deposit streaks are now tracked per vault. Build your habit and watch the streak grow." },
     { date: "Jun 15, 2026", title: "Currency toggle", body: "Switch between sats, BTC, and ZMW display anytime from settings. Your balance, your format." },
-    { date: "Jun 12, 2026", title: "Lightning deposits", body: "Instant deposits via the Lightning Network are now available. Deposit sats in seconds for near-zero fees." },
-    { date: "Jun 10, 2026", title: "Mobile Money support", body: "Deposit kwacha via MTN or Airtel MoMo. Your kwacha is converted to sats automatically." },
-    { date: "Jun 5,  2026", title: "Vault locking", body: "Lock a vault until a target date or goal is reached so you are not tempted to withdraw early." },
-    { date: "Jun 1,  2026", title: "UStack launched 🎉", body: "UStack is live for Zambian students. Stack sats, set goals, lock your future." },
   ];
-  const LIMIT = 6;
-  const visible = expanded ? items : items.slice(0, LIMIT);
-  const hasMore = items.length > LIMIT;
   return (
     <div className="flex flex-col gap-2">
-      {visible.map((u, i) => (
+      {items.map((u, i) => (
         <div key={i} className="rounded-xl glass p-3.5 flex gap-3">
           <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
           <div>
@@ -425,23 +415,14 @@ function Updates() {
           </div>
         </div>
       ))}
-      {hasMore && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="text-xs text-primary font-medium py-2 text-center"
-        >
-          {expanded ? "Show less" : "View all"}
-        </button>
-      )}
+      <button onClick={onViewAll} className="text-xs text-primary font-medium py-2 text-center">View all</button>
     </div>
   );
 }
 
-function Tips() {
-  const [expanded, setExpanded] = useState(false);
+function Tips({ onViewAll }: { onViewAll: () => void }) {
   const LIMIT = 6;
-  const visible = expanded ? tips : tips.slice(0, LIMIT);
-  const hasMore = tips.length > LIMIT;
+  const visible = tips.slice(0, LIMIT);
   return (
     <div className="flex flex-col gap-2">
       {visible.map((t, i) => (
@@ -450,11 +431,7 @@ function Tips() {
           <div className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{t.body}</div>
         </div>
       ))}
-      {hasMore && (
-        <button onClick={() => setExpanded((v) => !v)} className="text-xs text-primary font-medium py-2 text-center">
-          {expanded ? "Show less" : "View all"}
-        </button>
-      )}
+      <button onClick={onViewAll} className="text-xs text-primary font-medium py-2 text-center">View all</button>
     </div>
   );
 }
