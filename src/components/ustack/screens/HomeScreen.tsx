@@ -160,7 +160,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
           {([
             ["activity", "Activity"],
             ["history", "History"],
-            ["price", "Price"],
+            ["price", "Movements"],
             ["insights", "Insights"],
             ["updates", "Updates"],
             ["tips", "Tips"],
@@ -341,16 +341,25 @@ function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: num
   ];
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-xl bg-card/60 p-4">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Bitcoin price now</div>
-        <div className="text-2xl font-bold tabular-nums">{priceUsd > 0 ? `$${priceUsd.toLocaleString()}` : "—"}</div>
-        {priceZmw > 0 && <div className="text-xs text-muted-foreground mt-0.5">≈ K{Math.round(priceZmw).toLocaleString()} ZMW</div>}
-        <div className="flex items-center gap-1.5 mt-2">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: "oklch(0.82 0.17 140)" }} />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.17 140)" }} />
-          </span>
-          <span className="text-[10px] text-muted-foreground">Live · updates every 60s</span>
+      <div className="rounded-xl bg-card/60 p-4 flex items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Bitcoin price now</div>
+          <div className="text-2xl font-bold tabular-nums">{priceUsd > 0 ? `$${priceUsd.toLocaleString()}` : "—"}</div>
+          {priceZmw > 0 && <div className="text-xs text-muted-foreground mt-0.5">≈ K{Math.round(priceZmw).toLocaleString()} ZMW</div>}
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-70" style={{ background: "oklch(0.82 0.17 140)" }} />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: "oklch(0.82 0.17 140)" }} />
+            </span>
+            <span className="text-[10px] text-muted-foreground">Live · updates every 60s</span>
+          </div>
+        </div>
+        <div className="shrink-0 w-20 h-20 rounded-full border-2 border-primary/30 bg-primary/10 flex flex-col items-center justify-center text-center gap-0.5">
+          <div className="text-[9px] text-muted-foreground leading-none">1 sat =</div>
+          <div className="text-[13px] font-bold tabular-nums text-primary leading-tight">
+            {priceZmw > 0 ? `K${(priceZmw / 100_000_000).toFixed(4)}` : "—"}
+          </div>
+          <div className="text-[8px] text-muted-foreground/70 leading-none">ZMW</div>
         </div>
       </div>
       <div className="text-[10px] text-muted-foreground px-0.5">Change vs today</div>
