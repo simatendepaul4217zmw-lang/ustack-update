@@ -114,8 +114,11 @@ export function AppLock({ onUnlocked }: AppLockProps) {
             exit={{ opacity: 0, y: -16 }}
             className="flex flex-col items-center w-full h-full"
           >
-            {/* Icon + text — upper third */}
-            <div className="flex flex-col items-center gap-2 mt-[70%]">
+            {/* Spacer pushes everything down */}
+            <div className="flex-1" />
+
+            {/* Icon + text — sits just above numpad */}
+            <div className="flex flex-col items-center gap-2 mb-8">
               <div
                 className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center"
                 style={{ color: "oklch(0.82 0.17 140)" }}
@@ -126,8 +129,8 @@ export function AppLock({ onUnlocked }: AppLockProps) {
               <p className="text-sm text-muted-foreground">Enter your 4-digit PIN to unlock</p>
             </div>
 
-            {/* Numpad — pushed to bottom */}
-            <div className="mt-auto pb-10 w-full">
+            {/* Numpad */}
+            <div className="pb-10 w-full">
               <PinPad
                 pin={pin}
                 onChange={setPin}
