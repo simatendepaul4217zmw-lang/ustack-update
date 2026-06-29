@@ -112,26 +112,30 @@ export function AppLock({ onUnlocked }: AppLockProps) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
-            className="flex flex-col items-center gap-4 w-full"
+            className="flex flex-col items-center w-full h-full"
           >
-            <div
-              className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center mb-2 -mt-8"
-              style={{ color: "oklch(0.82 0.17 140)" }}
-            >
-              <Lock className="w-7 h-7" />
+            {/* Icon + text — upper third */}
+            <div className="flex flex-col items-center gap-2 mt-[18%]">
+              <div
+                className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center"
+                style={{ color: "oklch(0.82 0.17 140)" }}
+              >
+                <Lock className="w-7 h-7" />
+              </div>
+              <p className="text-base font-semibold mt-2">Enter your PIN</p>
+              <p className="text-sm text-muted-foreground">Enter your 4-digit PIN to unlock</p>
             </div>
-            <p className="text-base font-semibold">Enter your PIN</p>
-            <p className="text-sm text-muted-foreground">Enter your 4-digit PIN to unlock</p>
 
-            <div className="mt-6 w-full">
-            <PinPad
-              pin={pin}
-              onChange={setPin}
-              onComplete={handlePinComplete}
-              error={error}
-              disabled={unlockPin.isPending}
-              onBiometric={security?.biometricEnabled ? () => { setBiometricFailed(false); setMode("biometric"); setTimeout(attemptBiometric, 100); } : undefined}
-            />
+            {/* Numpad — pushed to bottom */}
+            <div className="mt-auto pb-10 w-full">
+              <PinPad
+                pin={pin}
+                onChange={setPin}
+                onComplete={handlePinComplete}
+                error={error}
+                disabled={unlockPin.isPending}
+                onBiometric={security?.biometricEnabled ? () => { setBiometricFailed(false); setMode("biometric"); setTimeout(attemptBiometric, 100); } : undefined}
+              />
             </div>
           </motion.div>
         )}
@@ -147,7 +151,7 @@ function LockScreen({ children }: { children: React.ReactNode }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="absolute inset-0 z-[200] bg-background flex flex-col items-center justify-center gap-8 px-8"
+      className="absolute inset-0 z-[200] bg-background flex flex-col items-center px-8"
     >
       {children}
     </motion.div>
