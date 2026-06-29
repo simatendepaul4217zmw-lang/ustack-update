@@ -21,9 +21,6 @@ export function PinPad({ pin, onChange, onComplete, onBiometric, length = 4, err
     const next = pin + k;
     if (next.length > length) return;
     onChange(next);
-    if (next.length === length) {
-      setTimeout(() => onComplete?.(next), 120);
-    }
   };
 
   return (
