@@ -114,6 +114,11 @@ export function AppLock({ onUnlocked }: AppLockProps) {
             exit={{ opacity: 0, y: -16 }}
             className="flex flex-col items-center w-full h-full"
           >
+            {/* Logo at top */}
+            <div className="pt-12 w-full flex justify-center">
+              <span className="text-lg font-black tracking-tight" style={{ color: "oklch(0.82 0.17 140)" }}>UStack</span>
+            </div>
+
             {/* Spacer pushes everything down */}
             <div className="flex-1" />
 
