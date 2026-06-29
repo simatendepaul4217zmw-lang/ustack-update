@@ -11,6 +11,7 @@ import { useCurrency } from "@/lib/currency-context";
 import { useWallet, useVaults, useWithdrawFromVault, useSendPayment, useSendOnChainPayment, useEstimateOnChainFee, useBtcPrice, useVerifyPin, useSecurityStatus, useMobileMoneyPayout } from "@/lib/hooks/useAppData";
 import { ACCENT_COLORS, VaultIcon } from "@/lib/vault-theme";
 import { PinPad } from "../PinPad";
+import { BiometricPrompt } from "../BiometricPrompt";
 
 type Step = "source" | "vault" | "locked" | "amount" | "warning" | "auth" | "done";
 type Source = "balance" | "vault";
@@ -38,6 +39,7 @@ export function WithdrawSheet({
 
   const [authPin, setAuthPin] = useState("");
   const [authError, setAuthError] = useState("");
+  const [authMode, setAuthMode] = useState<"biometric" | "pin">("biometric");
   const [pendingAfterAuth, setPendingAfterAuth] = useState<"withdraw" | "warning" | null>(null);
 
   const { data: wallet } = useWallet();
@@ -76,6 +78,7 @@ export function WithdrawSheet({
     if (security?.pinEnabled || security?.biometricEnabled) {
       setPendingAfterAuth(after);
       setAuthPin(""); setAuthError("");
+      setAuthMode(security?.biometricEnabled ? "biometric" : "pin");
       setStep("auth");
     } else if (after === "warning") {
       setStep("warning");
@@ -425,15 +428,39 @@ export function WithdrawSheet({
           </motion.div>
         )}
 
-        {/* Auth step: PIN verification */}
+        {/* Auth step: biometric or PIN verification */}
         {step === "auth" && (
           <motion.div key="auth" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-4 pt-2">
-            <button onClick={() => setStep("amount")} className="flex items-center gap-1 text-xs text-muted-foreground self-start mb-1"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
-            <div className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
-              <ShieldCheck className="w-7 h-7" />
-            </div>
-            <p className="text-sm text-muted-foreground text-center">Enter your PIN to confirm this transfer</p>
-            <PinPad pin={authPin} onChange={setAuthPin} onComplete={handleAuthComplete} error={authError} disabled={verifyPin.isPending} />
+            <button onClick={() => setStep("amount")} className="flex items-center gap-1 text-xs text-muted-foreground self-start mb-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+
+            {authMode === "biometric" ? (
+              <BiometricPrompt
+                reason="Authorize transfer"
+                onSuccess={() => {
+                  if (pendingAfterAuth === "warning") setStep("warning");
+                  else handleWithdraw();
+                }}
+                onFallback={() => { setAuthMode("pin"); setAuthPin(""); setAuthError(""); }}
+                showPinFallback={security?.pinEnabled}
+              />
+            ) : (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <p className="text-sm text-muted-foreground text-center">Enter your PIN to confirm this transfer</p>
+                <PinPad
+                  pin={authPin}
+                  onChange={setAuthPin}
+                  onComplete={handleAuthComplete}
+                  error={authError}
+                  disabled={verifyPin.isPending}
+                  onBiometric={security?.biometricEnabled ? () => { setAuthMode("biometric"); setAuthPin(""); setAuthError(""); } : undefined}
+                />
+              </>
+            )}
           </motion.div>
         )}
 

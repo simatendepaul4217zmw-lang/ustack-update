@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, Smartphone, CheckCircle2, AlertCircle } from "lucide-react";
+import { Zap, Smartphone, CheckCircle2, AlertCircle, ArrowLeft, ShieldCheck } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { fmtSats } from "@/lib/ustack-data";
 import { useCurrency } from "@/lib/currency-context";
-import { useWallet, useSendPayment, useMobileMoneyPayout, useBtcPrice } from "@/lib/hooks/useAppData";
+import { useWallet, useSendPayment, useMobileMoneyPayout, useBtcPrice, useSecurityStatus, useVerifyPin } from "@/lib/hooks/useAppData";
+import { PinPad } from "../PinPad";
+import { BiometricPrompt } from "../BiometricPrompt";
 
-type Step = "form" | "loading" | "done" | "error";
+type Step = "form" | "auth" | "loading" | "done" | "error";
 type MoMoProvider = "airtel" | "mtn" | "zamtel";
 
 const MOMO_PROVIDERS: { id: MoMoProvider; label: string; sub: string }[] = [
@@ -24,11 +26,18 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const [amount, setAmount] = useState("");
   const [errMsg, setErrMsg] = useState("");
 
+  // Auth state
+  const [authMode, setAuthMode] = useState<"biometric" | "pin">("biometric");
+  const [authPin, setAuthPin] = useState("");
+  const [authError, setAuthError] = useState("");
+
   const { data: wallet } = useWallet();
   const { data: btcPrice } = useBtcPrice();
   const { fmtValue } = useCurrency();
   const sendPaymentMut = useSendPayment();
   const momoPayoutMut = useMobileMoneyPayout();
+  const { data: security } = useSecurityStatus();
+  const verifyPin = useVerifyPin();
 
   const availableSats = wallet?.availableSats ?? 0;
   const priceZmw = btcPrice?.priceZmw;
@@ -36,6 +45,7 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const reset = () => {
     setStep("form");
     setAddress(""); setPhone(""); setAmount(""); setErrMsg("");
+    setAuthPin(""); setAuthError("");
     onClose();
   };
 
@@ -43,7 +53,17 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const amtNum = Number(amount);
   const canContinue = recipient.trim().length > 0 && amtNum > 0 && amtNum <= availableSats;
 
-  const handleSend = async () => {
+  const requireAuth = () => {
+    if (security?.pinEnabled || security?.biometricEnabled) {
+      setAuthMode(security?.biometricEnabled ? "biometric" : "pin");
+      setAuthPin(""); setAuthError("");
+      setStep("auth");
+    } else {
+      executeSend();
+    }
+  };
+
+  const executeSend = async () => {
     setErrMsg("");
     setStep("loading");
     try {
@@ -59,8 +79,19 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
     }
   };
 
+  const handleAuthPin = async (pin: string) => {
+    setAuthError("");
+    try {
+      await verifyPin.mutateAsync({ pin });
+      executeSend();
+    } catch (e: unknown) {
+      setAuthError(e instanceof Error ? e.message : "Incorrect PIN");
+      setAuthPin("");
+    }
+  };
+
   return (
-    <Sheet open={open} onClose={reset} title="Send Sats">
+    <Sheet open={open} onClose={reset} title={step === "auth" ? "Confirm Transfer" : "Send Sats"}>
       <AnimatePresence mode="wait">
 
         {(step === "form" || step === "error") && (
@@ -139,14 +170,47 @@ export function SendSheet({ open, onClose }: { open: boolean; onClose: () => voi
 
                   <button
                     disabled={!canContinue}
-                    onClick={handleSend}
+                    onClick={requireAuth}
                     className="mt-6 w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
                   >
-                    Send
+                    {(security?.pinEnabled || security?.biometricEnabled) ? "Continue" : "Send"}
                   </button>
                 </motion.div>
               )}
             </AnimatePresence>
+          </motion.div>
+        )}
+
+        {/* Auth step */}
+        {step === "auth" && (
+          <motion.div key="auth" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-4 pt-2">
+            <button onClick={() => setStep("form")} className="flex items-center gap-1 text-xs text-muted-foreground self-start mb-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+
+            {authMode === "biometric" ? (
+              <BiometricPrompt
+                reason="Confirm transfer"
+                onSuccess={executeSend}
+                onFallback={() => { setAuthMode("pin"); setAuthPin(""); setAuthError(""); }}
+                showPinFallback={security?.pinEnabled}
+              />
+            ) : (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <p className="text-sm text-muted-foreground text-center">Enter your PIN to confirm this transfer</p>
+                <PinPad
+                  pin={authPin}
+                  onChange={setAuthPin}
+                  onComplete={handleAuthPin}
+                  error={authError}
+                  disabled={verifyPin.isPending}
+                  onBiometric={security?.biometricEnabled ? () => { setAuthMode("biometric"); setAuthPin(""); setAuthError(""); } : undefined}
+                />
+              </>
+            )}
           </motion.div>
         )}
 

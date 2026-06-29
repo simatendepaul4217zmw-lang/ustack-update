@@ -5,6 +5,7 @@ import { Sheet } from "./Sheet";
 import { useTheme } from "@/lib/theme-context";
 import { useCurrency, type Currency } from "@/lib/currency-context";
 import { useSecurityStatus, useSetBiometric } from "@/lib/hooks/useAppData";
+import { isBiometricAvailable, clearWebBiometric } from "@/lib/native";
 
 type Section = "main" | "notifications";
 
@@ -33,6 +34,7 @@ export function SettingsSheet({
   const { theme, setTheme } = useTheme();
   const [section, setSection] = useState<Section>("main");
   const [clearing, setClearing] = useState(false);
+  const [bioAvailable, setBioAvailable] = useState<boolean | null>(null);
 
   const [notifDeposit, setNotifDeposit] = useState(() => LS.get(NOTIF_KEYS.deposit, "true") === "true");
   const [notifMilestone, setNotifMilestone] = useState(() => LS.get(NOTIF_KEYS.milestone, "true") === "true");
@@ -46,6 +48,12 @@ export function SettingsSheet({
 
   useEffect(() => { if (!open) setSection("main"); }, [open]);
 
+  // Check biometric availability when sheet opens
+  useEffect(() => {
+    if (!open) return;
+    isBiometricAvailable().then(setBioAvailable);
+  }, [open]);
+
   const handleBiometricsChange = async (v: boolean) => {
     if (v) {
       if (!security?.pinEnabled) {
@@ -55,7 +63,11 @@ export function SettingsSheet({
       }
       return;
     }
-    try { await setBiometric.mutateAsync({ enabled: false }); } catch {}
+    // Disabling — also clear the web biometric credential
+    try {
+      await setBiometric.mutateAsync({ enabled: false });
+      clearWebBiometric();
+    } catch {}
   };
 
   const notifChange = (key: keyof typeof NOTIF_KEYS, setter: (v: boolean) => void) => (v: boolean) => {
@@ -115,15 +127,42 @@ export function SettingsSheet({
               right={<ChevronRight className="w-4 h-4 text-muted-foreground" />}
               onClick={() => onOpenSecurity?.("pin")}
             />
-            <Row
-              icon={Fingerprint}
-              label="Fingerprint unlock"
-              right={
-                setBiometric.isPending
-                  ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  : <Toggle on={security?.biometricEnabled ?? false} onChange={handleBiometricsChange} />
-              }
-            />
+
+            {/* Fingerprint row — only show if PIN is set and biometric is available on this device */}
+            {security?.pinEnabled && (
+              bioAvailable === null ? (
+                <div className="px-4 py-3.5 flex items-center gap-3 border-b border-white/5 last:border-0">
+                  <Fingerprint className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-sm text-muted-foreground">Fingerprint unlock</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : bioAvailable ? (
+                <Row
+                  icon={Fingerprint}
+                  label="Fingerprint unlock"
+                  right={
+                    setBiometric.isPending
+                      ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      : <Toggle on={security?.biometricEnabled ?? false} onChange={handleBiometricsChange} />
+                  }
+                />
+              ) : (
+                <div className="px-4 py-3.5 flex items-center gap-3 border-b border-white/5 last:border-0 opacity-50">
+                  <Fingerprint className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-sm text-muted-foreground">Fingerprint unlock</span>
+                  <span className="text-[10px] text-muted-foreground">Not supported</span>
+                </div>
+              )
+            )}
+
+            {/* If no PIN yet, prompt to set one first */}
+            {!security?.pinEnabled && !secLoading && (
+              <div className="px-4 py-3.5 flex items-center gap-3 last:border-0 opacity-40">
+                <Fingerprint className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="flex-1 text-sm text-muted-foreground">Fingerprint unlock</span>
+                <span className="text-[10px] text-muted-foreground">Set PIN first</span>
+              </div>
+            )}
           </Group>
 
           <Group title="Notifications">

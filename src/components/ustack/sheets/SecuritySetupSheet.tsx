@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, Fingerprint, Check, ArrowLeft, Lock } from "lucide-react";
+import { ShieldCheck, Fingerprint, Check, ArrowLeft, Lock, AlertCircle, Loader2 } from "lucide-react";
 import { Sheet } from "./Sheet";
 import { PinPad } from "../PinPad";
 import { useSetupPin, useChangePin, useSetBiometric, useSecurityStatus } from "@/lib/hooks/useAppData";
+import { isNative, isBiometricAvailable, registerWebBiometric, tryBiometricAuth, hapticSuccess } from "@/lib/native";
 
 type Mode = "setup" | "change";
 type Step = "enter" | "confirm" | "current" | "new" | "confirmNew" | "biometric" | "done";
@@ -27,16 +28,34 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
   const [currentPin, setCurrentPin] = useState("");
   const [error, setError] = useState("");
 
+  // Biometric setup state
+  const [bioChecking, setBioChecking] = useState(false);
+  const [bioAvailable, setBioAvailable] = useState<boolean | null>(null);
+  const [bioRegistering, setBioRegistering] = useState(false);
+  const [bioError, setBioError] = useState("");
+
   const isChange = mode === "change" || security?.pinEnabled;
 
   useEffect(() => {
     if (!open) {
       setPin(""); setFirstPin(""); setCurrentPin(""); setError("");
+      setBioError(""); setBioAvailable(null);
       setStep(startAt === "biometric" ? "biometric" : isChange ? "current" : "enter");
     } else {
       setStep(startAt === "biometric" ? "biometric" : isChange ? "current" : "enter");
     }
   }, [open, isChange, startAt]);
+
+  // When landing on biometric step, check availability
+  useEffect(() => {
+    if (step !== "biometric") return;
+    setBioChecking(true);
+    setBioError("");
+    isBiometricAvailable().then((avail) => {
+      setBioAvailable(avail);
+      setBioChecking(false);
+    });
+  }, [step]);
 
   const close = () => { onClose(); };
   const back = () => {
@@ -44,21 +63,18 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
     setStep(isChange ? "current" : "enter");
   };
 
-  // Step: current PIN (change mode)
   const handleCurrentComplete = async (entered: string) => {
     setCurrentPin(entered);
     setError("");
     setPin(""); setStep("new");
   };
 
-  // Step: new PIN entry
   const handleNewComplete = (entered: string) => {
     setFirstPin(entered);
     setError("");
     setPin(""); setStep(isChange ? "confirmNew" : "confirm");
   };
 
-  // Step: confirm PIN
   const handleConfirmComplete = async (entered: string) => {
     const ref = isChange ? firstPin : firstPin || pin;
     if (entered !== ref) {
@@ -84,9 +100,41 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
     }
   };
 
-  const handleBiometricToggle = async (enabled: boolean) => {
+  const handleEnableBiometric = async () => {
+    setBioError("");
+    setBioRegistering(true);
+
     try {
-      await setBiometric.mutateAsync({ enabled });
+      let registered = false;
+
+      if (isNative) {
+        // On native, just try a biometric auth to confirm it works
+        registered = await tryBiometricAuth("Register your fingerprint for UStack");
+      } else {
+        // On web, register a WebAuthn credential
+        registered = await registerWebBiometric();
+      }
+
+      if (!registered) {
+        setBioError("Fingerprint not recognised. Try again or skip.");
+        setBioRegistering(false);
+        return;
+      }
+
+      await hapticSuccess();
+      await setBiometric.mutateAsync({ enabled: true });
+      await refetch();
+      setStep("done");
+    } catch {
+      setBioError("Failed to enable fingerprint. Please try again.");
+    } finally {
+      setBioRegistering(false);
+    }
+  };
+
+  const handleDisableBiometric = async () => {
+    try {
+      await setBiometric.mutateAsync({ enabled: false });
       await refetch();
       setStep("done");
     } catch {
@@ -94,7 +142,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
     }
   };
 
-  const isPending = setupPin.isPending || changePin.isPending || setBiometric.isPending;
+  const isPinPending = setupPin.isPending || changePin.isPending;
 
   const stepTitles: Partial<Record<Step, string>> = {
     enter: "Create PIN",
@@ -102,7 +150,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
     current: "Change PIN",
     new: "New PIN",
     confirmNew: "Confirm new PIN",
-    biometric: "Enable Fingerprint",
+    biometric: "Fingerprint",
     done: isChange ? "PIN Updated" : "Security Set Up",
   };
 
@@ -117,7 +165,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
               <Lock className="w-7 h-7" />
             </div>
             <p className="text-sm text-muted-foreground text-center mb-4">Choose a 4-digit PIN to secure your account</p>
-            <PinPad pin={pin} onChange={setPin} onComplete={handleNewComplete} error={error} disabled={isPending} />
+            <PinPad pin={pin} onChange={setPin} onComplete={handleNewComplete} error={error} disabled={isPinPending} />
           </motion.div>
         )}
 
@@ -126,7 +174,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
           <motion.div key="confirm" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-2 pt-2">
             <button onClick={back} className="flex items-center gap-1 text-xs text-muted-foreground self-start mb-3"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
             <p className="text-sm text-muted-foreground text-center mb-4">Re-enter your PIN to confirm it</p>
-            <PinPad pin={pin} onChange={setPin} onComplete={handleConfirmComplete} error={error} disabled={isPending} />
+            <PinPad pin={pin} onChange={setPin} onComplete={handleConfirmComplete} error={error} disabled={isPinPending} />
           </motion.div>
         )}
 
@@ -134,7 +182,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
         {step === "current" && (
           <motion.div key="current" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-2 pt-2">
             <p className="text-sm text-muted-foreground text-center mb-4">Enter your current PIN to continue</p>
-            <PinPad pin={pin} onChange={setPin} onComplete={handleCurrentComplete} error={error} disabled={isPending} />
+            <PinPad pin={pin} onChange={setPin} onComplete={handleCurrentComplete} error={error} disabled={isPinPending} />
           </motion.div>
         )}
 
@@ -142,7 +190,7 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
         {step === "new" && (
           <motion.div key="new" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-2 pt-2">
             <p className="text-sm text-muted-foreground text-center mb-4">Choose your new 4-digit PIN</p>
-            <PinPad pin={pin} onChange={setPin} onComplete={handleNewComplete} error={error} disabled={isPending} />
+            <PinPad pin={pin} onChange={setPin} onComplete={handleNewComplete} error={error} disabled={isPinPending} />
           </motion.div>
         )}
 
@@ -151,34 +199,108 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
           <motion.div key="confirmNew" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-2 pt-2">
             <button onClick={() => { setPin(""); setStep("new"); }} className="flex items-center gap-1 text-xs text-muted-foreground self-start mb-3"><ArrowLeft className="w-3.5 h-3.5" /> Back</button>
             <p className="text-sm text-muted-foreground text-center mb-4">Confirm your new PIN</p>
-            <PinPad pin={pin} onChange={setPin} onComplete={handleConfirmComplete} error={error} disabled={isPending} />
+            <PinPad pin={pin} onChange={setPin} onComplete={handleConfirmComplete} error={error} disabled={isPinPending} />
           </motion.div>
         )}
 
         {/* Biometric setup */}
         {step === "biometric" && (
           <motion.div key="biometric" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col items-center gap-5 pt-4 text-center">
-            <div className="w-20 h-20 rounded-full bg-card border border-white/8 flex items-center justify-center" style={{ color: "oklch(0.82 0.17 140)" }}>
-              <Fingerprint className="w-10 h-10" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold mb-2">Enable Fingerprint?</div>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                Use your fingerprint to unlock the app and confirm transfers instead of entering your PIN. Only available on the mobile app.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 w-full mt-2">
-              <button
-                onClick={() => handleBiometricToggle(true)}
-                disabled={setBiometric.isPending}
-                className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
-              >
-                <Fingerprint className="w-5 h-5" /> Enable Fingerprint
-              </button>
-              <button onClick={() => setStep("done")} className="w-full py-4 rounded-2xl glass text-sm font-medium text-muted-foreground">
-                Skip for now
-              </button>
-            </div>
+
+            {bioChecking ? (
+              <div className="flex flex-col items-center gap-4 py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Checking fingerprint support…</p>
+              </div>
+            ) : bioAvailable === false ? (
+              /* Not available on this device */
+              <>
+                <div className="w-20 h-20 rounded-full bg-white/5 border border-white/8 flex items-center justify-center text-muted-foreground">
+                  <Fingerprint className="w-10 h-10" />
+                </div>
+                <div>
+                  <div className="text-lg font-semibold mb-2">Not Available</div>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
+                    Fingerprint isn't supported on this device or browser. You can use your PIN to stay secure.
+                  </p>
+                </div>
+                <button onClick={() => setStep("done")} className="w-full bg-primary text-primary-foreground font-semibold py-4 rounded-2xl">
+                  Continue with PIN
+                </button>
+              </>
+            ) : (
+              /* Available — offer to enable */
+              <>
+                {/* Animated fingerprint */}
+                <div className="relative flex items-center justify-center">
+                  {!bioRegistering && (
+                    <motion.div
+                      animate={{ scale: [1, 1.5, 1], opacity: [0.3, 0, 0.3] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute w-24 h-24 rounded-full border border-primary/30"
+                    />
+                  )}
+                  <div
+                    className="w-24 h-24 rounded-[2rem] bg-card border border-white/8 flex items-center justify-center"
+                    style={{ color: "oklch(0.82 0.17 140)" }}
+                  >
+                    {bioRegistering
+                      ? <Loader2 className="w-10 h-10 animate-spin" />
+                      : <Fingerprint className="w-10 h-10" />
+                    }
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-lg font-semibold mb-2">
+                    {security?.biometricEnabled ? "Fingerprint Active" : "Enable Fingerprint?"}
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
+                    {security?.biometricEnabled
+                      ? "Your fingerprint is set up. You can disable it here or keep it active."
+                      : "Use your fingerprint to unlock the app and confirm transfers — no PIN needed."}
+                  </p>
+                </div>
+
+                {bioError && (
+                  <div className="flex items-start gap-2 rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive w-full text-left">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    {bioError}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 w-full mt-1">
+                  {security?.biometricEnabled ? (
+                    <>
+                      <button
+                        onClick={handleDisableBiometric}
+                        disabled={setBiometric.isPending || bioRegistering}
+                        className="w-full flex items-center justify-center gap-2 glass border border-white/10 text-destructive font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
+                      >
+                        Disable Fingerprint
+                      </button>
+                      <button onClick={() => setStep("done")} className="w-full py-4 rounded-2xl glass text-sm font-medium text-muted-foreground">
+                        Keep enabled
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleEnableBiometric}
+                        disabled={setBiometric.isPending || bioRegistering}
+                        className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-semibold py-4 rounded-2xl active:scale-[0.98] transition disabled:opacity-40"
+                      >
+                        <Fingerprint className="w-5 h-5" />
+                        {bioRegistering ? "Setting up…" : "Enable Fingerprint"}
+                      </button>
+                      <button onClick={() => setStep("done")} className="w-full py-4 rounded-2xl glass text-sm font-medium text-muted-foreground">
+                        Skip for now
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 
@@ -198,6 +320,9 @@ export function SecuritySetupSheet({ open, onClose, mode = "setup", startAt = "p
             </div>
             <div className="w-full rounded-2xl bg-card border border-white/8 p-4 text-left flex flex-col gap-2 text-xs text-muted-foreground">
               <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-primary shrink-0" /> 4-digit PIN secured</div>
+              {security?.biometricEnabled && (
+                <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-primary shrink-0" /> Fingerprint unlock active</div>
+              )}
               <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-primary shrink-0" /> Withdrawals protected</div>
               <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-primary shrink-0" /> Vault transfers protected</div>
               <div className="flex items-center gap-2"><Check className="w-3.5 h-3.5 text-primary shrink-0" /> 5 failed attempts = 30 min lock</div>
