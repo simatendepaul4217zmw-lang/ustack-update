@@ -160,7 +160,7 @@ export function HomeScreen({ onOpenVault, onDeposit, onWithdraw, onCreateVault }
           {([
             ["activity", "Activity"],
             ["history", "History"],
-            ["price", "Movements"],
+            ["price", "Price moves"],
             ["insights", "Insights"],
             ["updates", "Updates"],
             ["tips", "Tips"],
@@ -355,11 +355,11 @@ function PriceTab({ btcPrice, fmtValue: _fmtValue }: { btcPrice: { priceUsd: num
           </div>
         </div>
         <div className="shrink-0 w-20 h-20 rounded-full border-2 border-primary/30 bg-primary/10 flex flex-col items-center justify-center text-center gap-0.5">
-          <div className="text-[9px] text-muted-foreground leading-none">1 sat =</div>
+          <div className="text-[9px] text-muted-foreground leading-none">1 ZMW =</div>
           <div className="text-[13px] font-bold tabular-nums text-primary leading-tight">
-            {priceZmw > 0 ? `K${(priceZmw / 100_000_000).toFixed(4)}` : "—"}
+            {priceZmw > 0 ? `${Math.round(100_000_000 / priceZmw).toLocaleString()}` : "—"}
           </div>
-          <div className="text-[8px] text-muted-foreground/70 leading-none">ZMW</div>
+          <div className="text-[8px] text-muted-foreground/70 leading-none">sats</div>
         </div>
       </div>
       <div className="text-[10px] text-muted-foreground px-0.5">Change vs today</div>
